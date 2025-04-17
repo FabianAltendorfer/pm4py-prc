@@ -12,7 +12,7 @@ from datetime import datetime
 def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Erkennt Engpässe in einem Produktionsprozess mithilfe eines erweiterten Token-Based Replay (TBR)-Ansatzes,
-    der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert.
+    der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert (Masterarbeit Fabian Altendorfer).
     Die SR findet dynamisch eine Formel für Engpässe, basierend auf Kapazitäten, Zeitdifferenzen und optionalen Faktoren
     wie Maschinenmeldungen und Speicherständen.
 
@@ -27,7 +27,7 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     final_marking : Marking
         Endmarkierung des Petri-Netzes.
     parameters : Dict[str, Any], optional
-        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key, sr_weights, etc.
+        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key (welches Attribut enthält Maschinenmeldungen), sr_weights (steuert die Gewichtung für die Symbolic Regression)
 
     Rückgabe
     --------
@@ -37,35 +37,36 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     if parameters is None:
         parameters = {}
     
+    # Einbezogene Parameter
     activity_key = parameters.get('activity_key', 'concept:name')
     timestamp_key = parameters.get('timestamp_key', 'time:timestamp')
     machine_alert_key = parameters.get('machine_alert_key', None)
     sr_weights = parameters.get('sr_weights', {})
     
-    # Step 1: Data Preprocessing
+    # Step 1: Datenvorverarbeitung
     df_events = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
     
-    # Step 2: Extend Token-Based Replay to capture simultaneous token counts and metrics
-    tbr_results, place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = _extended_token_replay(
+    # Step 2: PRC-Erweiterung des Token Based Replays
+    tbr_results, place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = _prc_token_replay(
         log, net, initial_marking, final_marking, parameters, df_events
     )
     
-    # Step 3: Identify internal and external connections
+    # Step 3: Identifizierung interner und externer Verbindungen
     internal_places, external_places = _identify_connections(net, df_events[activity_key].unique())
     
-    # Step 4: Analyze capacities, frequencies, time differences, alerts, and storage levels
+    # Step 4: Analysieren der Einflussfaktoren
     capacity_info = _analyze_capacities(
         place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts,
         internal_places, external_places
     )
     
-    # Step 5: Prepare data for Symbolic Regression
+    # Step 5: Datenvorbereitung für die symbolische Regression
     sr_data = _prepare_sr_data(tbr_results, capacity_info, df_events)
     
-    # Step 6: Apply Symbolic Regression to compute bottleneck scores
+    # Step 6: Berechnung von Engpass Scores durch Symbolic Regression
     bottleneck_scores = _compute_sr_scores(sr_data, sr_weights)
     
-    # Step 7: Compile results
+    # Step 7: Zusammenfügen der Ergebnisse
     results_df = pd.DataFrame({
         'place': list(capacity_info.keys()),
         'max_capacity': [info['max_tokens'] for info in capacity_info.values()],
@@ -122,7 +123,7 @@ def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machin
     
     return df[['case_id', 'activity', 'timestamp', 'time_diff', 'next_activity', 'machine_alert']]
 
-def _extended_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Dict[str, Any], df_events: pd.DataFrame) -> tuple:
+def _prc_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Dict[str, Any], df_events: pd.DataFrame) -> tuple:
     """Erweitert TBR, um gleichzeitige Tokenanzahlen, Zeitdifferenzen, Maschinenmeldungen, Speicherstände und Frequenzen zu verfolgen."""
     tbr_params = parameters.copy()
     tbr_params['enable_pltr_fitness'] = True
