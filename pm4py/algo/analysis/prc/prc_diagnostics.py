@@ -13,8 +13,8 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     """
     Erkennt Engpässe in einem Produktionsprozess mithilfe eines erweiterten Token-Based Replay (TBR)-Ansatzes,
     der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert.
-    Die SR findet dynamisch eine Formel für Engpässe, basierend auf Kapazitäten, Zeitdifferenzen, Maschinenmeldungen,
-    Speicherständen und weiteren Faktoren.
+    Die SR findet dynamisch eine Formel für Engpässe, basierend auf Kapazitäten, Zeitdifferenzen und optionalen Faktoren
+    wie Maschinenmeldungen und Speicherständen.
 
     Parameter
     ----------
@@ -32,7 +32,7 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     Rückgabe
     --------
     pd.DataFrame
-        DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen, Speicherstände und SR-Scores.
+        DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen und SR-Scores.
     """
     if parameters is None:
         parameters = {}
@@ -40,12 +40,12 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     activity_key = parameters.get('activity_key', 'concept:name')
     timestamp_key = parameters.get('timestamp_key', 'time:timestamp')
     machine_alert_key = parameters.get('machine_alert_key', None)
-    sr_weights = parameters.get('sr_weights', {})  # Gewichtung für SR-Features, z. B. {'alert_count': 2.0}
+    sr_weights = parameters.get('sr_weights', {})
     
     # Step 1: Data Preprocessing
     df_events = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
     
-    # Step 2: Extend Token-Based Replay to capture simultaneous token counts and additional metrics
+    # Step 2: Extend Token-Based Replay to capture simultaneous token counts and metrics
     tbr_results, place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = _extended_token_replay(
         log, net, initial_marking, final_marking, parameters, df_events
     )
@@ -89,10 +89,7 @@ def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machin
                 'activity': event[activity_key],
                 'timestamp': pd.to_datetime(event[timestamp_key])
             }
-            if machine_alert_key and machine_alert_key in event:
-                event_data['machine_alert'] = event[machine_alert_key]
-            else:
-                event_data['machine_alert'] = 0
+            event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
             events.append(event_data)
     df = pd.DataFrame(events).sort_values(['case_id', 'timestamp'])
     
@@ -264,8 +261,8 @@ def _compute_sr_scores(sr_data: pd.DataFrame, sr_weights: Dict[str, float]) -> n
         'time_diff_variance', 'alert_count', 'storage_level_ratio', 'global_avg_time_diff'
     ]].values
     
-    # Zielvariable: Flexibel, SR findet die optimale Formel
-    y = sr_data['missing_tokens'] * (1 + sr_data['avg_time_diff']) / (sr_data['storage_level_ratio'] + 0.1)
+    # Zielvariable: Fokus auf Kapazitätsbeschränkung
+    y = sr_data['max_tokens'] * sr_data['frequency'] * (1 + sr_data['avg_time_diff']) / (sr_data['storage_level_ratio'] + 0.1)
     
     # Benutzerdefinierte Fitness-Funktion mit Gewichtung
     def custom_fitness(y_true, y_pred, sample_weight):
