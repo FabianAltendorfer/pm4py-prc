@@ -8,6 +8,10 @@ from gplearn.genetic import SymbolicRegressor
 from typing import Optional, Dict, Any, Union
 from collections import defaultdict
 from datetime import datetime
+import os
+
+# Globale Liste für Datenbereinigungsstatistiken
+data_cleaning_stats = []
 
 def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
@@ -27,21 +31,24 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     final_marking : Marking
         Endmarkierung des Petri-Netzes.
     parameters : Dict[str, Any], optional
-        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key (welches Attribut enthält Maschinenmeldungen), sr_weights (steuert die Gewichtung für die Symbolic Regression)
+        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key (welches Attribut enthält Maschinenmeldungen), sr_weights (steuert die Gewichtung für die Symbolic Regression), cleaning_stats_file (Pfad für CSV-Ausgabe der Bereinigungsstatistiken).
 
     Rückgabe
     --------
     pd.DataFrame
         DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen und SR-Scores.
     """
+    global data_cleaning_stats
+    data_cleaning_stats = []  # Zurücksetzen der Liste für jeden Aufruf
+    
     if parameters is None:
         parameters = {}
     
-    # Einbezogene Parameter
     activity_key = parameters.get('activity_key', 'concept:name')
     timestamp_key = parameters.get('timestamp_key', 'time:timestamp')
     machine_alert_key = parameters.get('machine_alert_key', None)
     sr_weights = parameters.get('sr_weights', {})
+    cleaning_stats_file = parameters.get('cleaning_stats_file', '../Ergebnisse/data_cleaning_statistics.csv')
     
     # Step 1: Datenvorverarbeitung
     df_events = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
@@ -76,6 +83,15 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
         'storage_level_ratio': [info['storage_level_ratio'] for info in capacity_info.values()],
         'sr_bottleneck_score': bottleneck_scores
     })
+    
+    # Step 8: Speichere Datenbereinigungsstatistiken als CSV
+    if data_cleaning_stats:
+        stats_df = pd.DataFrame(data_cleaning_stats)
+        stats_df.to_csv(cleaning_stats_file, index=False)
+        if os.path.exists(cleaning_stats_file):
+            print(f"Datenbereinigungsstatistiken erfolgreich gespeichert in: {cleaning_stats_file}")
+        else:
+            print(f"Fehler: Konnte Datenbereinigungsstatistiken nicht in {cleaning_stats_file} speichern")
     
     return results_df
 
@@ -129,28 +145,23 @@ def _prc_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, fi
     tbr_params['enable_pltr_fitness'] = True
     tbr_params['case_id_key'] = 'concept:name'
     
-    # Dictionaries zur Verfolgung von Metriken
     place_token_timeline = defaultdict(list)
     place_time_diffs = defaultdict(list)
     place_alerts = defaultdict(list)
     place_storage_levels = defaultdict(list)
     place_frequency_counts = defaultdict(int)
     
-    # TBR für jede Spur ausführen
     aligned_traces, place_fitness, _, _ = token_replay.apply_log(log, net, initial_marking, final_marking, parameters=tbr_params)
     
-    # Aggregiere Metriken über alle Spuren hinweg
     for trace_idx, trace_result in enumerate(aligned_traces):
         case_id = trace_result.get('case_id', f'case_{trace_idx}')
         trace_events = df_events[df_events['case_id'] == case_id][['activity', 'timestamp', 'machine_alert']]
         
-        # Verfolge Markierungen und Zeitstempel
         for marking in trace_result['reached_marking'].items():
             place, tokens = marking
             timestamp = trace_events.iloc[min(trace_idx, len(trace_events)-1)]['timestamp']
             place_token_timeline[place].append((timestamp, tokens))
         
-        # Zeitdifferenzen, Maschinenmeldungen und Speicherstände pro Platz
         for _, event in trace_events.iterrows():
             activity = event['activity']
             for trans in net.transitions:
@@ -168,7 +179,6 @@ def _prc_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, fi
                             tokens = place_token_counts.get(place, 1)
                             place_storage_levels[place].append(tokens / max(1, tokens))
     
-    # Berechne maximale gleichzeitige Tokenanzahl und Frequenz
     place_token_counts = {}
     for place, timeline in place_token_timeline.items():
         timeline.sort(key=lambda x: x[0])
@@ -177,7 +187,6 @@ def _prc_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, fi
         for i, (timestamp, tokens) in enumerate(timeline):
             current_tokens += tokens
             max_tokens = max(max_tokens, current_tokens)
-            # Zähle Frequenz, wenn nahe der maximalen Kapazität
             if tokens >= max_tokens * 0.9:
                 place_frequency_counts[place] += 1
             for j in range(i + 1, len(timeline)):
@@ -285,8 +294,16 @@ def _compute_sr_scores(sr_data: pd.DataFrame, sr_weights: Dict[str, float]) -> n
     return scores
 
 def log_cleaning_step(step_name: str, initial_count: int, removed_count: int, remaining_count: int, details: str = ""):
-    """Protokolliert Datenbereinigungsschritte."""
+    """Protokolliert Datenbereinigungsschritte und speichert sie in einer globalen Liste."""
+    global data_cleaning_stats
     print(f"Datenbereinigung: {step_name}, Initial: {initial_count}, Entfernt: {removed_count}, Verbleibend: {remaining_count}, Details: {details}")
+    data_cleaning_stats.append({
+        'step': step_name,
+        'initial_count': initial_count,
+        'removed_count': removed_count,
+        'remaining_count': remaining_count,
+        'details': details
+    })
 
 # Helper zur Sicherstellung der case_id in TBR-Ergebnissen
 token_replay.apply_log.__defaults__ = (*token_replay.apply_log.__defaults__, 'case_id_key', 'concept:name')
