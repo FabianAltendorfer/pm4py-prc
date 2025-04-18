@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet, Marking
-from pm4py.algo.conformance.tokenreplay import algorithm as token_replay
+from pm4py.algo.conformance.tokenreplay.variants import tbr_prc
 from pm4py.objects.petri_net.utils import petri_utils
 from gplearn.genetic import SymbolicRegressor
 from typing import Optional, Dict, Any, Union
@@ -18,7 +18,7 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     Erkennt Engpässe in einem Produktionsprozess mithilfe eines erweiterten Token-Based Replay (TBR)-Ansatzes,
     der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert (Masterarbeit Fabian Altendorfer).
     Die SR findet dynamisch eine Formel für Engpässe, basierend auf Kapazitäten, Zeitdifferenzen und optionalen Faktoren
-    wie Maschinenmeldungen und Speicherständen.
+    wie Maschinenmeldungen und Speicherständen, und modelliert die relative Verzögerung von Abschnitten im Gesamtprozess.
 
     Parameter
     ----------
@@ -31,15 +31,15 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     final_marking : Marking
         Endmarkierung des Petri-Netzes.
     parameters : Dict[str, Any], optional
-        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key (welches Attribut enthält Maschinenmeldungen), sr_weights (steuert die Gewichtung für die Symbolic Regression), cleaning_stats_file (Pfad für CSV-Ausgabe der Bereinigungsstatistiken).
+        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key, sr_weights, cleaning_stats_file.
 
     Rückgabe
     --------
     pd.DataFrame
-        DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen und SR-Scores.
+        DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen, maximaler Verzögerung und SR-Scores.
     """
     global data_cleaning_stats
-    data_cleaning_stats = []  # Zurücksetzen der Liste für jeden Aufruf
+    data_cleaning_stats = []
     
     if parameters is None:
         parameters = {}
@@ -51,11 +51,11 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     cleaning_stats_file = parameters.get('cleaning_stats_file', '../Ergebnisse/data_cleaning_statistics.csv')
     
     # Step 1: Datenvorverarbeitung
-    df_events = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
+    df_events, trace_total_times = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
     
-    # Step 2: PRC-Erweiterung des Token Based Replays
-    tbr_results, place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = _prc_token_replay(
-        log, net, initial_marking, final_marking, parameters, df_events
+    # Step 2: PRC-Erweiterung des Token Based Replays mit neuer TBR-Variante
+    tbr_results, place_fitness, transition_fitness, notexisting_activities, place_token_timeline, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = tbr_prc.apply_log(
+        log, net, initial_marking, final_marking, enable_pltr_fitness=True, parameters=parameters
     )
     
     # Step 3: Identifizierung interner und externer Verbindungen
@@ -63,12 +63,12 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     
     # Step 4: Analysieren der Einflussfaktoren
     capacity_info = _analyze_capacities(
-        place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts,
+        place_token_timeline, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts,
         internal_places, external_places
     )
     
     # Step 5: Datenvorbereitung für die symbolische Regression
-    sr_data = _prepare_sr_data(tbr_results, capacity_info, df_events)
+    sr_data = _prepare_sr_data(tbr_results, capacity_info, df_events, trace_total_times)
     
     # Step 6: Berechnung von Engpass Scores durch Symbolic Regression
     bottleneck_scores = _compute_sr_scores(sr_data, sr_weights)
@@ -79,6 +79,7 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
         'max_capacity': [info['max_tokens'] for info in capacity_info.values()],
         'bottleneck_frequency': [info['frequency'] for info in capacity_info.values()],
         'avg_time_diff': [info['avg_time_diff'] for info in capacity_info.values()],
+        'max_time': [info['max_time'] for info in capacity_info.values()],
         'machine_alert_count': [info['alert_count'] for info in capacity_info.values()],
         'storage_level_ratio': [info['storage_level_ratio'] for info in capacity_info.values()],
         'sr_bottleneck_score': bottleneck_scores
@@ -95,16 +96,22 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     
     return results_df
 
-def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machine_alert_key: Optional[str]) -> pd.DataFrame:
-    """Vorverarbeitung des Event-Logs, inklusive Timestamp-Validierung und Ausreißerentfernung."""
+def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machine_alert_key: Optional[str]) -> tuple[pd.DataFrame, Dict[str, float]]:
+    """Vorverarbeitung des Event-Logs, inklusive Timestamp-Validierung, Ausreißerentfernung und Berechnung der Gesamtverzögerung pro Spur."""
     events = []
+    trace_total_times = {}
     for trace in log:
         case_id = trace.attributes.get('concept:name', 'unknown')
+        timestamps = [pd.to_datetime(event[timestamp_key]) for event in trace]
+        if timestamps:
+            total_time = (max(timestamps) - min(timestamps)).total_seconds() / 3600
+            trace_total_times[case_id] = total_time
         for event in trace:
             event_data = {
                 'case_id': case_id,
                 'activity': event[activity_key],
-                'timestamp': pd.to_datetime(event[timestamp_key])
+                'timestamp': pd.to_datetime(event[timestamp_key]),
+                'time_diff': 0.0  # Wird von tbr_prc berechnet
             }
             event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
             events.append(event_data)
@@ -137,65 +144,7 @@ def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machin
         details="Entfernen von NaT, ungültigen Timestamps und Zeitdifferenzen > 8760 Stunden oder 30% über Median."
     )
     
-    return df[['case_id', 'activity', 'timestamp', 'time_diff', 'next_activity', 'machine_alert']]
-
-def _prc_token_replay(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Dict[str, Any], df_events: pd.DataFrame) -> tuple:
-    """Erweitert TBR, um gleichzeitige Tokenanzahlen, Zeitdifferenzen, Maschinenmeldungen, Speicherstände und Frequenzen zu verfolgen."""
-    tbr_params = parameters.copy()
-    tbr_params['enable_pltr_fitness'] = True
-    tbr_params['case_id_key'] = 'concept:name'
-    
-    place_token_timeline = defaultdict(list)
-    place_time_diffs = defaultdict(list)
-    place_alerts = defaultdict(list)
-    place_storage_levels = defaultdict(list)
-    place_frequency_counts = defaultdict(int)
-    
-    aligned_traces, place_fitness, _, _ = token_replay.apply_log(log, net, initial_marking, final_marking, parameters=tbr_params)
-    
-    for trace_idx, trace_result in enumerate(aligned_traces):
-        case_id = trace_result.get('case_id', f'case_{trace_idx}')
-        trace_events = df_events[df_events['case_id'] == case_id][['activity', 'timestamp', 'machine_alert']]
-        
-        for marking in trace_result['reached_marking'].items():
-            place, tokens = marking
-            timestamp = trace_events.iloc[min(trace_idx, len(trace_events)-1)]['timestamp']
-            place_token_timeline[place].append((timestamp, tokens))
-        
-        for _, event in trace_events.iterrows():
-            activity = event['activity']
-            for trans in net.transitions:
-                if trans.label == activity:
-                    for arc in trans.out_arcs:
-                        place = arc.target
-                        time_diff = df_events[
-                            (df_events['case_id'] == case_id) & (df_events['activity'] == activity)
-                        ]['time_diff'].mean()
-                        if not np.isnan(time_diff):
-                            place_time_diffs[place].append(time_diff)
-                        alert = event['machine_alert']
-                        place_alerts[place].append(alert)
-                        if '0505' in activity:
-                            tokens = place_token_counts.get(place, 1)
-                            place_storage_levels[place].append(tokens / max(1, tokens))
-    
-    place_token_counts = {}
-    for place, timeline in place_token_timeline.items():
-        timeline.sort(key=lambda x: x[0])
-        max_tokens = 0
-        current_tokens = 0
-        for i, (timestamp, tokens) in enumerate(timeline):
-            current_tokens += tokens
-            max_tokens = max(max_tokens, current_tokens)
-            if tokens >= max_tokens * 0.9:
-                place_frequency_counts[place] += 1
-            for j in range(i + 1, len(timeline)):
-                if timeline[j][0] > timestamp:
-                    current_tokens -= tokens
-                    break
-        place_token_counts[place] = max_tokens
-    
-    return aligned_traces, place_token_counts, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts
+    return df[['case_id', 'activity', 'timestamp', 'time_diff', 'next_activity', 'machine_alert']], trace_total_times
 
 def _identify_connections(net: PetriNet, activities: list) -> tuple:
     """Identifiziert interne und externe Plätze basierend auf Transitionen."""
@@ -218,14 +167,17 @@ def _identify_connections(net: PetriNet, activities: list) -> tuple:
     
     return internal_places, external_places
 
-def _analyze_capacities(place_token_counts: Dict[str, int], place_time_diffs: Dict[str, list], place_alerts: Dict[str, list], place_storage_levels: Dict[str, list], place_frequency_counts: Dict[str, int], internal_places: set, external_places: set) -> Dict[str, Dict[str, Any]]:
+def _analyze_capacities(place_token_timeline: Dict[PetriNet.Place, List[Tuple[pd.Timestamp, int]]], place_time_diffs: Dict[PetriNet.Place, List[float]], place_alerts: Dict[PetriNet.Place, List[float]], place_storage_levels: Dict[PetriNet.Place, List[float]], place_frequency_counts: Dict[PetriNet.Place, int], internal_places: set, external_places: set) -> Dict[PetriNet.Place, Dict[str, Any]]:
     """Analysiert Kapazitäten, Häufigkeiten, Zeitdifferenzen, Maschinenmeldungen und Speicherstände."""
     capacity_info = {}
-    total_traces = len(place_frequency_counts)
-    for place, max_tokens in place_token_counts.items():
+    total_traces = sum(place_frequency_counts.values()) / len(place_frequency_counts) if place_frequency_counts else 1
+    for place in place_token_timeline:
         place_type = 'internal' if place in internal_places else 'external' if place in external_places else 'other'
-        frequency = place_frequency_counts[place] / max(1, total_traces) if total_traces > 0 else 0.0
+        tokens = [t[1] for t in place_token_timeline[place]]
+        max_tokens = max(tokens, default=0)
+        frequency = place_frequency_counts.get(place, 0) / max(1, total_traces)
         avg_time_diff = np.mean(place_time_diffs.get(place, [0])) if place_time_diffs.get(place) else 0
+        max_time = np.max(place_time_diffs.get(place, [0])) if place_time_diffs.get(place) else 0
         time_diff_variance = np.var(place_time_diffs.get(place, [0])) if place_time_diffs.get(place) else 0
         alert_count = sum(place_alerts.get(place, [0]))
         storage_level_ratio = np.mean(place_storage_levels.get(place, [1.0])) if place_storage_levels.get(place) else 1.0
@@ -233,6 +185,7 @@ def _analyze_capacities(place_token_counts: Dict[str, int], place_time_diffs: Di
             'max_tokens': max_tokens,
             'frequency': frequency,
             'avg_time_diff': avg_time_diff,
+            'max_time': max_time,
             'time_diff_variance': time_diff_variance,
             'alert_count': alert_count,
             'storage_level_ratio': storage_level_ratio,
@@ -241,13 +194,14 @@ def _analyze_capacities(place_token_counts: Dict[str, int], place_time_diffs: Di
     
     return capacity_info
 
-def _prepare_sr_data(tbr_results: list, capacity_info: Dict[str, Dict[str, Any]], df_events: pd.DataFrame) -> pd.DataFrame:
-    """Bereitet Features für Symbolische Regression vor."""
+def _prepare_sr_data(tbr_results: list, capacity_info: Dict[PetriNet.Place, Dict[str, Any]], df_events: pd.DataFrame, trace_total_times: Dict[str, float]) -> pd.DataFrame:
+    """Bereitet Features für Symbolische Regression vor, einschließlich Gesamtverzögerung pro Spur."""
     sr_data = []
     for trace_result in tbr_results:
         case_id = trace_result.get('case_id', 'unknown')
         fitness = trace_result['trace_fitness']
         missing_tokens = trace_result['missing_tokens']
+        total_time = trace_total_times.get(case_id, 0.0)
         for place, info in capacity_info.items():
             sr_data.append({
                 'case_id': case_id,
@@ -257,10 +211,12 @@ def _prepare_sr_data(tbr_results: list, capacity_info: Dict[str, Dict[str, Any]]
                 'max_tokens': info['max_tokens'],
                 'frequency': info['frequency'],
                 'avg_time_diff': info['avg_time_diff'],
+                'max_time': info['max_time'],
                 'time_diff_variance': info['time_diff_variance'],
                 'alert_count': info['alert_count'],
                 'storage_level_ratio': info['storage_level_ratio'],
-                'global_avg_time_diff': df_events['time_diff'].mean()
+                'global_avg_time_diff': df_events['time_diff'].mean(),
+                'total_trace_time': total_time
             })
     return pd.DataFrame(sr_data)
 
@@ -268,11 +224,12 @@ def _compute_sr_scores(sr_data: pd.DataFrame, sr_weights: Dict[str, float]) -> n
     """Berechnet Engpass-Scores mithilfe Symbolischer Regression mit benutzerdefinierter Fitness-Funktion."""
     X = sr_data[[
         'fitness', 'missing_tokens', 'max_tokens', 'frequency', 'avg_time_diff',
-        'time_diff_variance', 'alert_count', 'storage_level_ratio', 'global_avg_time_diff'
+        'max_time', 'time_diff_variance', 'alert_count', 'storage_level_ratio',
+        'global_avg_time_diff', 'total_trace_time'
     ]].values
     
-    # Zielvariable: Fokus auf Kapazitätsbeschränkung
-    y = sr_data['max_tokens'] * sr_data['frequency'] * (1 + sr_data['avg_time_diff']) / (sr_data['storage_level_ratio'] + 0.1)
+    # Zielvariable: Fokus auf Gesamtverzögerung des Prozesses
+    y = sr_data['total_trace_time']
     
     # Benutzerdefinierte Fitness-Funktion mit Gewichtung
     def custom_fitness(y_true, y_pred, sample_weight):
@@ -304,6 +261,3 @@ def log_cleaning_step(step_name: str, initial_count: int, removed_count: int, re
         'remaining_count': remaining_count,
         'details': details
     })
-
-# Helper zur Sicherstellung der case_id in TBR-Ergebnissen
-token_replay.apply_log.__defaults__ = (*token_replay.apply_log.__defaults__, 'case_id_key', 'concept:name')
