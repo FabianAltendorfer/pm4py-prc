@@ -136,7 +136,6 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
         raise ValueError(f"Erwarteter Typ für 'log' ist EventLog oder pd.DataFrame, erhalten: {type(log)}")
 
     for trace in log:
-        # Prüfe, ob trace ein Trace-Objekt ist
         if not hasattr(trace, 'attributes'):
             print(f"Warnung: Trace ist kein Trace-Objekt, sondern {type(trace)}. Überspringe...")
             continue
@@ -145,9 +144,12 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
         timestamps = []
         for event in trace:
             try:
+                if timestamp_key not in event:
+                    raise KeyError(f"Zeitstempel-Schlüssel '{timestamp_key}' nicht im Ereignis gefunden: {event}")
                 timestamp = pd.to_datetime(event[timestamp_key])
                 timestamps.append(timestamp)
-            except (KeyError, ValueError):
+            except (KeyError, ValueError) as e:
+                print(f"Fehler beim Verarbeiten des Zeitstempels für Ereignis in Spur {case_id}: {str(e)}")
                 continue  # Überspringe ungültige Ereignisse
         
         if timestamps:
@@ -156,6 +158,8 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
         
         for event in trace:
             try:
+                if timestamp_key not in event:
+                    raise KeyError(f"Zeitstempel-Schlüssel '{timestamp_key}' nicht im Ereignis gefunden: {event}")
                 event_data = {
                     'case_id': case_id,
                     'activity': event[activity_key],
@@ -164,7 +168,8 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
                 }
                 event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
                 events.append(event_data)
-            except (KeyError, ValueError):
+            except (KeyError, ValueError) as e:
+                print(f"Fehler beim Verarbeiten des Ereignisses in Spur {case_id}: {str(e)}")
                 continue  # Überspringe ungültige Ereignisse
     
     if not events:
