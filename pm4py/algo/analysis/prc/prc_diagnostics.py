@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from pm4py.objects.log.obj import EventLog
-from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.algo.conformance.tokenreplay.variants import tbr_prc
 from pm4py.objects.petri_net.utils import petri_utils
 from gplearn.genetic import SymbolicRegressor
@@ -13,7 +12,7 @@ import os
 # Globale Liste für Datenbereinigungsstatistiken
 data_cleaning_stats = []
 
-def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def prc_bottleneckdetection_sr(log: Union[EventLog, pd.DataFrame], net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Erkennt Engpässe in einem Produktionsprozess mithilfe eines erweiterten Token-Based Replay (TBR)-Ansatzes,
     der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert (Masterarbeit Fabian Altendorfer).
@@ -22,8 +21,8 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
 
     Parameter
     ----------
-    log : EventLog
-        Objektzentrierter Event-Log (OCEL), abgeflacht zu einem traditionellen Event-Log.
+    log : EventLog oder pd.DataFrame
+        Objektzentrierter Event-Log (OCEL), abgeflacht zu einem traditionellen Event-Log, oder ein DataFrame.
     net : PetriNet
         Petri-Netz, das den Produktionsprozess repräsentiert.
     initial_marking : Marking
@@ -31,7 +30,7 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     final_marking : Marking
         Endmarkierung des Petri-Netzes.
     parameters : Dict[str, Any], optional
-        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, machine_alert_key, sr_weights, cleaning_stats_file.
+        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, case_id_key, machine_alert_key, sr_weights, cleaning_stats_file.
 
     Rückgabe
     --------
@@ -46,12 +45,13 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     
     activity_key = parameters.get('activity_key', 'concept:name')
     timestamp_key = parameters.get('timestamp_key', 'time:timestamp')
+    case_id_key = parameters.get('case_id_key', 'case:concept:name')
     machine_alert_key = parameters.get('machine_alert_key', None)
     sr_weights = parameters.get('sr_weights', {})
     cleaning_stats_file = parameters.get('cleaning_stats_file', '../Ergebnisse/data_cleaning_statistics.csv')
     
     # Step 1: Datenvorverarbeitung
-    df_events, trace_total_times = _preprocess_log(log, activity_key, timestamp_key, machine_alert_key)
+    df_events, trace_total_times = _preprocess_log(log, activity_key, timestamp_key, case_id_key, machine_alert_key)
     
     # Step 2: PRC-Erweiterung des Token Based Replays mit neuer TBR-Variante
     tbr_results, place_fitness, transition_fitness, notexisting_activities, place_token_timeline, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = tbr_prc.apply_log(
@@ -96,25 +96,55 @@ def prc_bottleneckdetection_sr(log: EventLog, net: PetriNet, initial_marking: Ma
     
     return results_df
 
-def _preprocess_log(log: EventLog, activity_key: str, timestamp_key: str, machine_alert_key: Optional[str]) -> tuple[pd.DataFrame, Dict[str, float]]:
+def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, timestamp_key: str, case_id_key: str, machine_alert_key: Optional[str]) -> tuple[pd.DataFrame, Dict[str, float]]:
     """Vorverarbeitung des Event-Logs, inklusive Timestamp-Validierung, Ausreißerentfernung und Berechnung der Gesamtverzögerung pro Spur."""
     events = []
     trace_total_times = {}
+
+    # Konvertiere DataFrame zu EventLog, falls nötig
+    if isinstance(log, pd.DataFrame):
+        log = pm4py.format_dataframe(log, case_id=case_id_key, activity_key=activity_key, timestamp_key=timestamp_key)
+        log = pm4py.convert_to_event_log(log)
+    
+    # Verarbeite EventLog
+    if not isinstance(log, EventLog):
+        raise ValueError(f"Erwarteter Typ für 'log' ist EventLog oder pd.DataFrame, erhalten: {type(log)}")
+
     for trace in log:
+        # Prüfe, ob trace ein Trace-Objekt ist
+        if not hasattr(trace, 'attributes'):
+            print(f"Warnung: Trace ist kein Trace-Objekt, sondern {type(trace)}. Überspringe...")
+            continue
+        
         case_id = trace.attributes.get('concept:name', 'unknown')
-        timestamps = [pd.to_datetime(event[timestamp_key]) for event in trace]
+        timestamps = []
+        for event in trace:
+            try:
+                timestamp = pd.to_datetime(event[timestamp_key])
+                timestamps.append(timestamp)
+            except (KeyError, ValueError):
+                continue  # Überspringe ungültige Ereignisse
+        
         if timestamps:
             total_time = (max(timestamps) - min(timestamps)).total_seconds() / 3600
             trace_total_times[case_id] = total_time
+        
         for event in trace:
-            event_data = {
-                'case_id': case_id,
-                'activity': event[activity_key],
-                'timestamp': pd.to_datetime(event[timestamp_key]),
-                'time_diff': 0.0  # Wird von tbr_prc berechnet
-            }
-            event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
-            events.append(event_data)
+            try:
+                event_data = {
+                    'case_id': case_id,
+                    'activity': event[activity_key],
+                    'timestamp': pd.to_datetime(event[timestamp_key]),
+                    'time_diff': 0.0  # Wird von tbr_prc berechnet
+                }
+                event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
+                events.append(event_data)
+            except (KeyError, ValueError):
+                continue  # Überspringe ungültige Ereignisse
+    
+    if not events:
+        raise ValueError("Keine gültigen Ereignisse im Log gefunden.")
+
     df = pd.DataFrame(events).sort_values(['case_id', 'timestamp'])
     
     # Timestamp-Validierung
