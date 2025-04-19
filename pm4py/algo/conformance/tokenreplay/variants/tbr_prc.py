@@ -168,8 +168,8 @@ def enable_hidden_transitions(net, marking, activated_transitions, visited_trans
         if not something_changed:
             break
     result = [marking, activated_transitions, visited_transitions, all_visited_markings]
-    if result is None:
-        print(f"Fehler: enable_hidden_transitions returned None für Transition {t}")
+    if not isinstance(result, list):
+        print(f"Fehler: enable_hidden_transitions returned non-list object {result} für Transition {t}")
         return [marking, activated_transitions, visited_transitions, all_visited_markings]
     return result
 
@@ -182,8 +182,8 @@ def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr,
     hidden_transitions_to_enable = get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_paths_by_hidden)
     if hidden_transitions_to_enable:
         result = enable_hidden_transitions(net, marking, act_tr, visit_trans, vis_mark, hidden_transitions_to_enable, t)
-        if result is None:
-            print(f"Fehler: enable_hidden_transitions returned None für Transition {t}")
+        if not isinstance(result, list):
+            print(f"Fehler: enable_hidden_transitions returned non-list object {result} für Transition {t}")
             return [net, marking, act_tr, vis_mark]
         [marking, act_tr, visit_trans, vis_mark] = result
         if not semantics.is_enabled(t, net, marking):
@@ -195,8 +195,8 @@ def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr,
                         if t4 not in visit_trans:
                             if not semantics.is_enabled(t4, net, marking):
                                 result = apply_hidden_trans(t4, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
-                                if result is None:
-                                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans für Transition {t4} returned None")
+                                if not isinstance(result, list):
+                                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned non-list object {result} für Transition {t4}")
                                     return [net, marking, act_tr, vis_mark]
                                 [net, marking, act_tr, vis_mark] = result
                             if semantics.is_enabled(t4, net, marking):
@@ -207,8 +207,8 @@ def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr,
         if not semantics.is_enabled(t, net, marking):
             if not (marking_at_start == marking):
                 result = apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
-                if result is None:
-                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans für Transition {t} returned None")
+                if not isinstance(result, list):
+                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned non-list object {result} für Transition {t}")
                     return [net, marking, act_tr, vis_mark]
                 [net, marking, act_tr, vis_mark] = result
     return [net, marking, act_tr, vis_mark]
@@ -271,10 +271,10 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                     if walk_through_hidden_trans and not semantics.is_enabled(t, net, marking):
                         visited_transitions = set()
                         prev_len_activated_transitions = len(act_trans)
-                        print(f"Aufruf von apply_hidden_trans für Transition {t}, marking: {marking}, places_shortest_path_by_hidden: {places_shortest_path_by_hidden}")
+                        print(f"Aufruf von apply_hidden_trans für Transition {t}, marking: {marking}")
                         result = apply_hidden_trans(t, net, copy(marking), places_shortest_path_by_hidden, copy(act_trans), 0, copy(visited_transitions), copy(vis_mark))
-                        if result is None:
-                            print(f"Fehler: apply_hidden_trans returned None für Transition {t}")
+                        if not isinstance(result, list):
+                            print(f"Fehler: apply_hidden_trans returned non-list object {result} für Transition {t}")
                             continue  # Überspringe die Iteration, um den Fehler zu vermeiden
                         [net, new_marking, new_act_trans, new_vis_mark] = result
 
