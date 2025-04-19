@@ -128,7 +128,6 @@ def get_hidden_transitions_to_enable(marking, places_with_missing, places_shorte
         for p2 in places_with_missing_keys:
             if p1 in places_shortest_path_by_hidden and p2 in places_shortest_path_by_hidden[p1]:
                 path = places_shortest_path_by_hidden[p1][p2]
-                # Extrahiere nur Transitionen aus den Tupeln und filtere None-Gewichte
                 transitions = [trans for trans, weight in path if trans is not None and weight is not None]
                 if transitions:
                     hidden_transitions.append(transitions)
@@ -166,7 +165,7 @@ def enable_hidden_transitions(net, marking, activated_transitions, visited_trans
                 all_visited_markings.append(marking)
                 something_changed = True
             j_indexes[path_index] += 1
-            if semantics.is_enabled(t, net, marking):
+            if t is not None and semantics.is_enabled(t, net, marking):
                 break
         if not something_changed:
             break
@@ -338,7 +337,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                             if pl2 in place_fitness:
                                 place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
                     if semantics.is_enabled(t, net, marking):
-                        # Speichere aktuelle Markierung mit Zeitstempel der Aktivität
                         try:
                             if 'timestamp' not in trace[i]:
                                 raise KeyError(f"Zeitstempel-Schlüssel 'timestamp' nicht im Ereignis gefunden: {trace[i]}")
@@ -348,7 +346,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                             timestamp = pd.Timestamp.now()  # Fallback-Wert
                         for place in marking:
                             place_token_timeline[place].append((timestamp, marking[place]))
-                        # Aktualisiere andere PRC-Metriken
                         time_diff = trace[i].get('time_diff', 0)
                         alert = trace[i].get(machine_alert_key, 0) if machine_alert_key else 0
                         for arc in t.out_arcs:
@@ -389,7 +386,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
             else:
                 activating_transition_interval.append([trace[i][activity_key], prev_len_activated_transitions, len(act_trans), ""])
 
-    # Überprüfe, ob die Endmarkierung erreicht wurde
     if try_to_reach_final_marking_through_hidden and not break_condition_final_marking(marking, final_marking):
         hidden_transitions = get_req_transitions_for_final_marking(marking, final_marking, places_shortest_path_by_hidden)
         if hidden_transitions:
@@ -522,7 +518,6 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     if places_shortest_path_by_hidden is None:
         places_shortest_path_by_hidden = get_places_shortest_path_by_hidden(net, TechnicalParameters.MAX_REC_DEPTH.value)
     
-    # Validierung von places_shortest_path_by_hidden
     print("Validiere places_shortest_path_by_hidden...")
     for source, targets in places_shortest_path_by_hidden.items():
         for target, transitions in targets.items():
@@ -639,7 +634,7 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
     show_progress_bar = exec_utils.get_param_value(Parameters.SHOW_PROGRESS_BAR, parameters, constants.SHOW_PROGRESS_BAR)
     case_id_key = exec_utils.get_param_value(Parameters.CASE_ID_KEY, parameters, constants.CASE_CONCEPT_NAME)
     
-    if type(log) is not pd.DataFrame:
+    if not isinstance(log, pd.DataFrame):
         log = log_converter.apply(log, variant=log_converter.Variants.TO_EVENT_LOG, parameters=parameters)
     
     return apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=enable_pltr_fitness, consider_remaining_in_fitness=consider_remaining_in_fitness, reach_mark_through_hidden=try_to_reach_final_marking_through_hidden, stop_immediately_unfit=stop_immediately_unfit, walk_through_hidden_trans=walk_through_hidden_trans, places_shortest_path_by_hidden=places_shortest_path_by_hidden, activity_key=activity_key, is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time, cleaning_token_flood=cleaning_token_flood, disable_variants=disable_variants, return_object_names=return_names, show_progress_bar=show_progress_bar, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness, case_id_key=case_id_key, timestamp_key=timestamp_key, machine_alert_key=machine_alert_key)
