@@ -16,28 +16,26 @@ data_cleaning_stats = []
 
 def prc_bottleneckdetection_sr(log: Union[EventLog, pd.DataFrame], net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
-    Erkennt Engpässe in einem Produktionsprozess mithilfe eines erweiterten Token-Based Replay (TBR)-Ansatzes,
-    der eine Production Resource Constrained (PRC)-Analyse und Symbolische Regression (SR) integriert (Masterarbeit Fabian Altendorfer).
-    Die SR findet dynamisch eine Formel für Engpässe, basierend auf Kapazitäten, Zeitdifferenzen und optionalen Faktoren
-    wie Maschinenmeldungen und Speicherständen, und modelliert die relative Verzögerung von Abschnitten im Gesamtprozess.
+    Erkennt Engpässe in einem Produktionsprozess durch erweitertes Token-Based Replay (TBR) mit Production Resource Constrained (PRC)-Analyse und Symbolischer Regression (SR).
+    SR modelliert Engpässe basierend auf Kapazitäten, Zeitdifferenzen, Maschinenmeldungen und Speicherständen.
 
-    Parameter
+    Parameters
     ----------
-    log : EventLog oder pd.DataFrame
-        Objektzentrierter Event-Log (OCEL), abgeflacht zu einem traditionellen Event-Log, oder ein DataFrame.
+    log : Union[EventLog, pd.DataFrame]
+        Abgeflachter objektzentrierter Event-Log (OCEL) oder DataFrame.
     net : PetriNet
-        Petri-Netz, das den Produktionsprozess repräsentiert.
+        Petri-Netz des Produktionsprozesses.
     initial_marking : Marking
         Anfangsmarkierung des Petri-Netzes.
     final_marking : Marking
         Endmarkierung des Petri-Netzes.
-    parameters : Dict[str, Any], optional
-        Parameter für den Algorithmus, einschließlich activity_key, timestamp_key, case_id_key, machine_alert_key, sr_weights, cleaning_stats_file.
+    parameters : Optional[Dict[str, Any]], optional
+        Algorithmusparameter (z. B. activity_key, timestamp_key, machine_alert_key, sr_weights, cleaning_stats_file).
 
-    Rückgabe
-    --------
+    Returns
+    -------
     pd.DataFrame
-        DataFrame mit Engpassdiagnosen, einschließlich Kapazitäten, Zeitdifferenzen, maximaler Verzögerung und SR-Scores.
+        Engpassdiagnosen mit Kapazitäten, Zeitdifferenzen, Verzögerungen und SR-Scores.
     """
     global data_cleaning_stats
     data_cleaning_stats = []
@@ -50,7 +48,7 @@ def prc_bottleneckdetection_sr(log: Union[EventLog, pd.DataFrame], net: PetriNet
     case_id_key = parameters.get('case_id_key', 'case:concept:name')
     machine_alert_key = parameters.get('machine_alert_key', None)
     sr_weights = parameters.get('sr_weights', {})
-    cleaning_stats_file = parameters.get('cleaning_stats_file', '../Ergebnisse/data_cleaning_statistics.csv')
+    cleaning_stats_file = parameters.get('cleaning_stats_file', os.path.join(os.path.dirname(__file__), '..', 'Ergebnisse', 'data_cleaning_statistics.csv'))
     
     # Step 1: Datenvorverarbeitung
     df_events, trace_total_times = _preprocess_log(log, activity_key, timestamp_key, case_id_key, machine_alert_key)
