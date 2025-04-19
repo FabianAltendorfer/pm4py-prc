@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pm4py
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.algo.conformance.tokenreplay.variants import tbr_prc
@@ -104,8 +105,11 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
 
     # Konvertiere DataFrame zu EventLog, falls nötig
     if isinstance(log, pd.DataFrame):
-        log = pm4py.format_dataframe(log, case_id=case_id_key, activity_key=activity_key, timestamp_key=timestamp_key)
-        log = pm4py.convert_to_event_log(log)
+        try:
+            log = pm4py.format_dataframe(log, case_id=case_id_key, activity_key=activity_key, timestamp_key=timestamp_key)
+            log = pm4py.convert_to_event_log(log)
+        except Exception as e:
+            raise ValueError(f"Fehler bei der Konvertierung des DataFrame zu EventLog: {str(e)}")
     
     # Verarbeite EventLog
     if not isinstance(log, EventLog):
