@@ -1,2 +1,2 @@
-from .prc_diagnostics import apply_prc_bottleneckdetection_sr
+from .prc_diagnostics import prc_bottleneckdetection_sr
 
