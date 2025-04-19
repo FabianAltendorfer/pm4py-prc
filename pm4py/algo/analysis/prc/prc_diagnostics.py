@@ -150,7 +150,7 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
                 timestamps.append(timestamp)
             except (KeyError, ValueError) as e:
                 print(f"Fehler beim Verarbeiten des Zeitstempels für Ereignis in Spur {case_id}: {str(e)}")
-                continue  # Überspringe ungültige Ereignisse
+                continue
         
         if timestamps:
             total_time = (max(timestamps) - min(timestamps)).total_seconds() / 3600
@@ -164,37 +164,33 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
                     'case_id': case_id,
                     'activity': event[activity_key],
                     'timestamp': pd.to_datetime(event[timestamp_key]),
-                    'time_diff': 0.0  # Wird von tbr_prc berechnet
+                    'time_diff': 0.0
                 }
                 event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
                 events.append(event_data)
             except (KeyError, ValueError) as e:
                 print(f"Fehler beim Verarbeiten des Ereignisses in Spur {case_id}: {str(e)}")
-                continue  # Überspringe ungültige Ereignisse
+                continue
     
     if not events:
         raise ValueError("Keine gültigen Ereignisse im Log gefunden.")
 
     df = pd.DataFrame(events).sort_values(['case_id', 'timestamp'])
     
-    # Timestamp-Validierung
     initial_count = len(df)
     df = df.dropna(subset=['timestamp'])
     df = df[df['timestamp'] <= pd.Timestamp('2030-01-01', tz='UTC')]
     
-    # Berechne Zeitdifferenzen und entferne Ausreißer
     df['next_timestamp'] = df.groupby('case_id')['timestamp'].shift(-1)
     df['next_activity'] = df.groupby('case_id')['activity'].shift(-1)
     df['time_diff'] = (df['next_timestamp'] - df['timestamp']).dt.total_seconds() / 3600
     df = df[df['time_diff'].notna()]
     df = df[df['time_diff'] <= 8760]
     
-    # Entferne Zeiten 30% über dem Median pro Verbindung
     median_times = df.groupby(['activity', 'next_activity'])['time_diff'].median().reset_index(name='median_time')
     df = df.merge(median_times, on=['activity', 'next_activity'], how='left')
     df = df[df['time_diff'] <= df['median_time'] * 1.3]
     
-    # Protokolliere Datenbereinigung
     removed_count = initial_count - len(df)
     log_cleaning_step(
         step_name="Datenbereinigung",
