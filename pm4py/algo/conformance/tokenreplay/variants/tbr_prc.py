@@ -485,7 +485,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning, align_utils.get_visible_transitions_eventually_enabled_by_marking(net, marking_before_cleaning), missing, consumed, remaining, produced]
 
 class ApplyTraceTokenReplay:
-    def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness, transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_when_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None, marking_to_activity_caching=None, is_reduction=False, thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value, cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False, timestamp_key=xes_util.DEFAULT_TIMESTAMP_KEY, machine_alert_key=None, place_token_timeline=None, place_time_diffs=None, place_alerts=None, place_storage_levels=None, place_frequency_counts=None):
+    def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness, transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None, marking_to_activity_caching=None, is_reduction=False, thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value, cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False, timestamp_key=xes_util.DEFAULT_TIMESTAMP_KEY, machine_alert_key=None, place_token_timeline=None, place_time_diffs=None, place_alerts=None, place_storage_levels=None, place_frequency_counts=None):
         self.thread_is_alive = True
         self.trace = trace
         self.net = net
@@ -501,7 +501,7 @@ class ApplyTraceTokenReplay:
         self.consider_activities_not_in_model_in_fitness = consider_activities_not_in_model_in_fitness
         self.activity_key = activity_key
         self.try_to_reach_final_marking_through_hidden = reach_mark_through_hidden
-        self.stop_immediately_when_unfit = stop_immediately_unfit
+        self.stop_immediately_unfit = stop_immediately_unfit
         self.walk_through_hidden_trans = walk_through_hidden_trans
         self.post_fix_caching = post_fix_caching
         self.marking_to_activity_caching = marking_to_activity_caching
