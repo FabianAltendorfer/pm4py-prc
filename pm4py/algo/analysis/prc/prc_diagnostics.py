@@ -5,7 +5,7 @@ from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.algo.conformance.tokenreplay.variants import tbr_prc
 from pm4py.objects.petri_net.utils import petri_utils
 from gplearn.genetic import SymbolicRegressor
-from typing import Optional, Dict, Any, Union, List
+from typing import Optional, Dict, Any, Union, List, Tuple
 from collections import defaultdict
 from datetime import datetime
 import os
