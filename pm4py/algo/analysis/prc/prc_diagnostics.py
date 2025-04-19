@@ -56,9 +56,29 @@ def prc_bottleneckdetection_sr(log: Union[EventLog, pd.DataFrame], net: PetriNet
     df_events, trace_total_times = _preprocess_log(log, activity_key, timestamp_key, case_id_key, machine_alert_key)
     
     # Step 2: PRC-Erweiterung des Token Based Replays mit neuer TBR-Variante
-    tbr_results, place_fitness, transition_fitness, notexisting_activities, place_token_timeline, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = tbr_prc.apply_log(
-        log, net, initial_marking, final_marking, enable_pltr_fitness=True, parameters=parameters
-    )
+   tbr_results, place_fitness, transition_fitness, notexisting_activities, place_token_timeline, place_time_diffs, place_alerts, place_storage_levels, place_frequency_counts = tbr_prc.apply_log(
+    log=log,
+    net=net,
+    initial_marking=initial_marking,
+    final_marking=final_marking,
+    enable_pltr_fitness=True,
+    activity_key=activity_key,
+    timestamp_key=timestamp_key,
+    case_id_key=case_id_key,
+    machine_alert_key=machine_alert_key,
+    consider_remaining_in_fitness=True,
+    reach_mark_through_hidden=True,
+    stop_immediately_unfit=False,
+    walk_through_hidden_trans=True,
+    places_shortest_path_by_hidden=None,
+    is_reduction=False,
+    thread_maximum_ex_time=tbr_prc.TechnicalParameters.MAX_DEF_THR_EX_TIME.value,
+    cleaning_token_flood=False,
+    disable_variants=False,
+    return_object_names=False,
+    show_progress_bar=True,
+    consider_activities_not_in_model_in_fitness=False
+)
     
     # Step 3: Identifizierung interner und externer Verbindungen
     internal_places, external_places = _identify_connections(net, df_events[activity_key].unique())
