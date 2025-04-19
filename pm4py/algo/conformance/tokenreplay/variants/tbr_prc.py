@@ -304,7 +304,13 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                                 place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
                     if semantics.is_enabled(t, net, marking):
                         # Speichere aktuelle Markierung mit Zeitstempel der Aktivität
-                        timestamp = trace[i][timestamp_key]
+                        try:
+                            if timestamp_key not in trace[i]:
+                                raise KeyError(f"Zeitstempel-Schlüssel '{timestamp_key}' nicht im Ereignis gefunden: {trace[i]}")
+                            timestamp = trace[i][timestamp_key]
+                        except KeyError as e:
+                            print(f"Fehler beim Zugriff auf Zeitstempel in Spur {i}: {str(e)}")
+                            timestamp = pd.Timestamp.now()  # Fallback-Wert
                         for place in marking:
                             place_token_timeline[place].append((timestamp, marking[place]))
                         # Aktualisiere andere PRC-Metriken
@@ -347,142 +353,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                 activating_transition_interval.append([trace[i][activity_key], prev_len_activated_transitions, len(act_trans), trace[i - 1][activity_key]])
             else:
                 activating_transition_interval.append([trace[i][activity_key], prev_len_activated_transitions, len(act_trans), ""])
-
-    if try_to_reach_final_marking_through_hidden and not used_postfix_cache:
-        for i in range(TechnicalParameters.MAX_IT_FINAL1.value):
-            if not break_condition_final_marking(marking, final_marking):
-                hidden_transitions_to_enable = get_req_transitions_for_final_marking(marking, final_marking, places_shortest_path_by_hidden)
-                for group in hidden_transitions_to_enable:
-                    for t in group:
-                        if semantics.is_enabled(t, net, marking):
-                            timestamp = trace[-1][timestamp_key] if trace else pd.Timestamp.now()
-                            for place in marking:
-                                place_token_timeline[place].append((timestamp, marking[place]))
-                            marking = semantics.execute(t, net, marking)
-                            act_trans.append(t)
-                            vis_mark.append(marking)
-                            c, cmap = get_consumed_tokens(t)
-                            p, pmap = get_produced_tokens(t)
-                            if enable_pltr_fitness:
-                                for pl2 in cmap:
-                                    if pl2 in place_fitness:
-                                        place_fitness[pl2]["c"] += cmap[pl2] * trace_occurrences
-                                for pl2 in pmap:
-                                    if pl2 in place_fitness:
-                                        place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
-                            consumed = consumed + c
-                            produced = produced + p
-                    if break_condition_final_marking(marking, final_marking):
-                        break
-            else:
-                break
-        if not break_condition_final_marking(marking, final_marking):
-            if len(final_marking) == 1:
-                sink_place = list(final_marking)[0]
-                connections_to_sink = []
-                for place in marking:
-                    if place in places_shortest_path_by_hidden and sink_place in places_shortest_path_by_hidden[place]:
-                        connections_to_sink.append([place, places_shortest_path_by_hidden[place][sink_place]])
-                connections_to_sink = sorted(connections_to_sink, key=lambda x: len(x[1]))
-                for i in range(TechnicalParameters.MAX_IT_FINAL2.value):
-                    for j in range(len(connections_to_sink)):
-                        for z in range(len(connections_to_sink[j][1])):
-                            t = connections_to_sink[j][1][z]
-                            if semantics.is_enabled(t, net, marking):
-                                timestamp = trace[-1][timestamp_key] if trace else pd.Timestamp.now()
-                                for place in marking:
-                                    place_token_timeline[place].append((timestamp, marking[place]))
-                                marking = semantics.execute(t, net, marking)
-                                act_trans.append(t)
-                                c, cmap = get_consumed_tokens(t)
-                                p, pmap = get_produced_tokens(t)
-                                if enable_pltr_fitness:
-                                    for pl2 in cmap:
-                                        if pl2 in place_fitness:
-                                            place_fitness[pl2]["c"] += cmap[pl2] * trace_occurrences
-                                    for pl2 in pmap:
-                                        if pl2 in place_fitness:
-                                            place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
-                                consumed = consumed + c
-                                produced = produced + p
-                                vis_mark.append(marking)
-                                continue
-                            else:
-                                break
-
-    marking_before_cleaning = copy(marking)
-    diff_fin_mark_mark = Marking()
-    for p in final_marking:
-        diff = final_marking[p] - marking[p]
-        if diff > 0:
-            diff_fin_mark_mark[p] = diff
-    remaining = 0
-    for p in marking:
-        if p in final_marking:
-            marking[p] = max(0, marking[p] - final_marking[p])
-            if enable_pltr_fitness:
-                if marking[p] > 0:
-                    if p in place_fitness:
-                        if trace not in place_fitness[p]["underfed_traces"]:
-                            place_fitness[p]["overfed_traces"].add(trace)
-                        place_fitness[p]["r"] += marking[p] * trace_occurrences
-        elif enable_pltr_fitness:
-            if p in place_fitness:
-                if trace not in place_fitness[p]["underfed_traces"]:
-                    place_fitness[p]["overfed_traces"].add(trace)
-                place_fitness[p]["r"] += marking[p] * trace_occurrences
-        remaining = remaining + marking[p]
-    for p in current_remaining_map:
-        if enable_pltr_fitness:
-            if p in place_fitness:
-                if trace not in place_fitness[p]["underfed_traces"] and trace not in place_fitness[p]["overfed_traces"]:
-                    place_fitness[p]["overfed_traces"].add(trace)
-                place_fitness[p]["r"] += current_remaining_map[p] * trace_occurrences
-        remaining = remaining + current_remaining_map[p]
-    if consider_remaining_in_fitness:
-        is_fit = (missing == 0) and (remaining == 0)
-    else:
-        is_fit = (missing == 0)
-    if consider_activities_not_in_model_in_fitness and notexisting_activities_in_model:
-        is_fit = False
-    for pl in final_marking:
-        consumed += final_marking[pl]
-    for pl in diff_fin_mark_mark:
-        missing += diff_fin_mark_mark[pl]
-    if enable_pltr_fitness:
-        for pl in initial_marking:
-            place_fitness[pl]["p"] += initial_marking[pl] * trace_occurrences
-        for pl in final_marking:
-            place_fitness[pl]["c"] += final_marking[pl] * trace_occurrences
-        for pl in diff_fin_mark_mark:
-            place_fitness[pl]["m"] += diff_fin_mark_mark[pl] * trace_occurrences
-    if consumed > 0 and produced > 0:
-        trace_fitness = 0.5 * (1.0 - float(missing) / float(consumed)) + 0.5 * (1.0 - float(remaining) / float(produced))
-    else:
-        trace_fitness = 1.0
-    if is_fit:
-        for suffix in activating_transition_index:
-            if suffix not in post_fix_caching.cache:
-                post_fix_caching.cache[suffix] = {}
-            if activating_transition_index[suffix]["marking"] not in post_fix_caching.cache[suffix]:
-                post_fix_caching.cache[suffix][activating_transition_index[suffix]["marking"]] = {"trans_to_activate": act_trans[activating_transition_index[suffix]["index"]:], "final_marking": marking}
-        for trans in activating_transition_interval:
-            activity = trans[0]
-            start_marking_index = trans[1]
-            end_marking_index = trans[2]
-            previous_activity = trans[3]
-            if end_marking_index < len(vis_mark):
-                start_marking_object = vis_mark[start_marking_index]
-                start_marking_hash = hash(start_marking_object)
-                end_marking_object = vis_mark[end_marking_index]
-                if activity in trans_map:
-                    this_activated_trans = act_trans[start_marking_index:end_marking_index]
-                    this_visited_markings = vis_mark[start_marking_index + 1:end_marking_index + 1]
-                    if start_marking_hash not in marking_to_activity_caching.cache:
-                        marking_to_activity_caching.cache[start_marking_hash] = {}
-                    if activity not in marking_to_activity_caching.cache[start_marking_hash]:
-                        marking_to_activity_caching.cache[start_marking_hash][activity] = {"start_marking": start_marking_object, "end_marking": end_marking_object, "this_activated_transitions": this_activated_trans, "this_visited_markings": this_visited_markings, "previousActivity": previous_activity}
-    return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning, align_utils.get_visible_transitions_eventually_enabled_by_marking(net, marking_before_cleaning), missing, consumed, remaining, produced]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness, transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None, marking_to_activity_caching=None, is_reduction=False, thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value, cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False, timestamp_key=xes_util.DEFAULT_TIMESTAMP_KEY, machine_alert_key=None, place_token_timeline=None, place_time_diffs=None, place_alerts=None, place_storage_levels=None, place_frequency_counts=None):
