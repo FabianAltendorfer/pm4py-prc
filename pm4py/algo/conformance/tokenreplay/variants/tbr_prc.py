@@ -253,7 +253,9 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                     else:
                         t = trans_map[trace[i][activity_key]]
                     if walk_through_hidden_trans and not semantics.is_enabled(t, net, marking):
-                        visited
+                        visited_transitions = set()
+                        prev_len_activated_transitions = len(act_trans)
+                        [net, new_marking, new_act_trans, new_vis_mark] = apply_hidden_trans(t, net, copy(marking), places_shortest_path_by_hidden, copy(act_trans), 0, copy(visited_transitions), copy(vis_mark))
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness, transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None, marking_to_activity_caching=None, is_reduction=False, thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value, cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False, timestamp_key=xes_util.DEFAULT_TIMESTAMP_KEY, machine_alert_key=None, place_token_timeline=None, place_time_diffs=None, place_alerts=None, place_storage_levels=None, place_frequency_counts=None):
