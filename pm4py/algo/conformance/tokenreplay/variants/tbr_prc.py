@@ -36,6 +36,7 @@ from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.util import typing
 from collections import Counter, defaultdict
 from pm4py.objects.conversion.log import converter as log_converter
+import numpy as np
 
 class Parameters(Enum):
     CASE_ID_KEY = constants.PARAMETER_CONSTANT_CASEID_KEY
