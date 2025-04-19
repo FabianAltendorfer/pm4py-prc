@@ -167,7 +167,11 @@ def enable_hidden_transitions(net, marking, activated_transitions, visited_trans
             break
         if not something_changed:
             break
-    return [marking, activated_transitions, visited_transitions, all_visited_markings]
+    result = [marking, activated_transitions, visited_transitions, all_visited_markings]
+    if result is None:
+        print(f"Fehler: enable_hidden_transitions returned None für Transition {t}")
+        return [marking, activated_transitions, visited_transitions, all_visited_markings]
+    return result
 
 def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth, visit_trans, vis_mark):
     if rec_depth >= TechnicalParameters.MAX_REC_DEPTH_HIDTRANSENABL.value or t in visit_trans:
@@ -369,6 +373,13 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
         places_shortest_path_by_hidden = get_places_shortest_path_by_hidden(net, TechnicalParameters.MAX_REC_DEPTH.value)
+    
+    # Validierung von places_shortest_path_by_hidden
+    for source, targets in places_shortest_path_by_hidden.items():
+        for target, transitions in targets.items():
+            for trans, weight in transitions:
+                if trans is None or weight is None:
+                    print(f"Warnung: Ungültiger Pfad in places_shortest_path_by_hidden: {source} -> {target}, Transition: {trans}, Gewicht: {weight}")
     
     place_fitness_per_trace = {}
     transition_fitness_per_trace = {}
