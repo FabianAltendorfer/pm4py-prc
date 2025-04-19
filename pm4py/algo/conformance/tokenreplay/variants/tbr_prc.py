@@ -121,103 +121,108 @@ def get_places_with_missing_tokens(t, marking):
     return places_with_missing
 
 def get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_path_by_hidden):
-    hidden_transitions_to_enable = []
-    marking_places = [x for x in marking]
-    marking_places = sorted(marking_places, key=lambda x: x.name)
-    places_with_missing_keys = [x for x in places_with_missing]
-    places_with_missing_keys = sorted(places_with_missing_keys, key=lambda x: x.name)
+    hidden_transitions = []
+    marking_places = sorted([x for x in marking], key=lambda x: x.name)
+    places_with_missing_keys = sorted([x for x in places_with_missing], key=lambda x: x.name)
     for p1 in marking_places:
         for p2 in places_with_missing_keys:
             if p1 in places_shortest_path_by_hidden and p2 in places_shortest_path_by_hidden[p1]:
-                hidden_transitions_to_enable.append(places_shortest_path_by_hidden[p1][p2])
-    hidden_transitions_to_enable = sorted(hidden_transitions_to_enable, key=lambda x: len(x))
-    return hidden_transitions_to_enable
+                path = places_shortest_path_by_hidden[p1][p2]
+                # Extrahiere nur Transitionen aus den Tupeln und filtere None-Gewichte
+                transitions = [trans for trans, weight in path if trans is not None and weight is not None]
+                if transitions:
+                    hidden_transitions.append(transitions)
+    hidden_transitions = sorted(hidden_transitions, key=lambda x: len(x))
+    print(f"get_hidden_transitions_to_enable returns: {hidden_transitions}")
+    return hidden_transitions
 
 def get_req_transitions_for_final_marking(marking, final_marking, places_shortest_path_by_hidden):
-    hidden_transitions_to_enable = []
-    marking_places = [x for x in marking]
-    marking_places = sorted(marking_places, key=lambda x: x.name)
-    final_marking_places = [x for x in final_marking]
-    final_marking_places = sorted(final_marking_places, key=lambda x: x.name)
+    hidden_transitions = []
+    marking_places = sorted([x for x in marking], key=lambda x: x.name)
+    final_marking_places = sorted([x for x in final_marking], key=lambda x: x.name)
     for p1 in marking_places:
         for p2 in final_marking_places:
             if p1 in places_shortest_path_by_hidden and p2 in places_shortest_path_by_hidden[p1]:
-                hidden_transitions_to_enable.append(places_shortest_path_by_hidden[p1][p2])
-    hidden_transitions_to_enable = sorted(hidden_transitions_to_enable, key=lambda x: len(x))
-    return hidden_transitions_to_enable
+                path = places_shortest_path_by_hidden[p1][p2]
+                transitions = [trans for trans, weight in path if trans is not None and weight is not None]
+                if transitions:
+                    hidden_transitions.append(transitions)
+    hidden_transitions = sorted(hidden_transitions, key=lambda x: len(x))
+    return hidden_transitions
 
-def enable_hidden_transitions(net, marking, activated_transitions, visited_transitions, all_visited_markings, hidden_transitions_to_enable, t):
-    print(f"enable_hidden_transitions aufgerufen für Transition {t}, hidden_transitions_to_enable: {hidden_transitions_to_enable}")
-    j_indexes = [0] * len(hidden_transitions_to_enable)
+def enable_hidden_transitions(net, marking, activated_transitions, visited_transitions, all_visited_markings, hidden_transitions, t):
+    print(f"enable_hidden_transitions aufgerufen für Transition {t}, hidden_transitions: {hidden_transitions}")
+    j_indexes = [0] * len(hidden_transitions)
     for z in range(10000000):
         something_changed = False
-        for k in range(j_indexes[z % len(hidden_transitions_to_enable)], len(hidden_transitions_to_enable[z % len(hidden_transitions_to_enable)])):
-            t3 = hidden_transitions_to_enable[z % len(hidden_transitions_to_enable)][j_indexes[z % len(hidden_transitions_to_enable)]]
+        path_index = z % len(hidden_transitions)
+        if j_indexes[path_index] < len(hidden_transitions[path_index]):
+            t3 = hidden_transitions[path_index][j_indexes[path_index]]
             print(f"Verarbeite Transition {t3} in enable_hidden_transitions")
-            if not t3 == t:
-                if semantics.is_enabled(t3, net, marking):
-                    if t3 not in visited_transitions:
-                        marking = semantics.execute(t3, net, marking)
-                        activated_transitions.append(t3)
-                        visited_transitions.add(t3)
-                        all_visited_markings.append(marking)
-                        something_changed = True
-            j_indexes[z % len(hidden_transitions_to_enable)] = j_indexes[z % len(hidden_transitions_to_enable)] + 1
+            if t3 != t and t3 not in visited_transitions and semantics.is_enabled(t3, net, marking):
+                marking = semantics.execute(t3, net, marking)
+                activated_transitions.append(t3)
+                visited_transitions.add(t3)
+                all_visited_markings.append(marking)
+                something_changed = True
+            j_indexes[path_index] += 1
             if semantics.is_enabled(t, net, marking):
                 break
-        if semantics.is_enabled(t, net, marking):
-            break
         if not something_changed:
             break
     result = [marking, activated_transitions, visited_transitions, all_visited_markings]
-    if not isinstance(result, list):
-        print(f"Fehler: enable_hidden_transitions returned non-list object {result} für Transition {t}")
+    print(f"enable_hidden_transitions Rückgabewert für Transition {t}: {result}")
+    if not isinstance(result, list) or len(result) != 4:
+        print(f"Fehler: enable_hidden_transitions returned invalid object {result} für Transition {t}")
         return [marking, activated_transitions, visited_transitions, all_visited_markings]
     return result
 
 def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth, visit_trans, vis_mark):
-    print(f"apply_hidden_trans aufgerufen für Transition {t}, rec_depth: {rec_depth}")
+    print(f"apply_hidden_trans aufgerufen für Transition {t}, rec_depth: {rec_depth}, marking: {marking}")
     if rec_depth >= TechnicalParameters.MAX_REC_DEPTH_HIDTRANSENABL.value or t in visit_trans:
         print(f"Rückgabe wegen max Rekursionstiefe oder besuchter Transition {t}")
         return [net, marking, act_tr, vis_mark]
     visit_trans.add(t)
     marking_at_start = copy(marking)
     places_with_missing = get_places_with_missing_tokens(t, marking)
-    hidden_transitions_to_enable = get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_paths_by_hidden)
-    print(f"hidden_transitions_to_enable: {hidden_transitions_to_enable}")
-    if hidden_transitions_to_enable:
-        result = enable_hidden_transitions(net, marking, act_tr, visit_trans, vis_mark, hidden_transitions_to_enable, t)
-        if not isinstance(result, list):
-            print(f"Fehler: enable_hidden_transitions returned non-list object {result} für Transition {t}")
+    print(f"places_with_missing für Transition {t}: {places_with_missing}")
+    hidden_transitions = get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_paths_by_hidden)
+    print(f"hidden_transitions für Transition {t}: {hidden_transitions}")
+    if hidden_transitions:
+        result = enable_hidden_transitions(net, marking, act_tr, visit_trans, vis_mark, hidden_transitions, t)
+        print(f"enable_hidden_transitions result für Transition {t}: {result}")
+        if not isinstance(result, list) or len(result) != 4:
+            print(f"Fehler: enable_hidden_transitions returned invalid object {result} für Transition {t}")
             return [net, marking, act_tr, vis_mark]
         [marking, act_tr, visit_trans, vis_mark] = result
         if not semantics.is_enabled(t, net, marking):
-            hidden_transitions_to_enable = get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_paths_by_hidden)
-            print(f"Erneute hidden_transitions_to_enable: {hidden_transitions_to_enable}")
-            for z in range(len(hidden_transitions_to_enable)):
-                for k in range(len(hidden_transitions_to_enable[z])):
-                    t4 = hidden_transitions_to_enable[z][k]
-                    print(f"Verarbeite Transition {t4}")
-                    if not t4 == t:
-                        if t4 not in visit_trans:
-                            if not semantics.is_enabled(t4, net, marking):
-                                result = apply_hidden_trans(t4, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
-                                if not isinstance(result, list):
-                                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned non-list object {result} für Transition {t4}")
-                                    return [net, marking, act_tr, vis_mark]
-                                [net, marking, act_tr, vis_mark] = result
-                            if semantics.is_enabled(t4, net, marking):
-                                marking = semantics.execute(t4, net, marking)
-                                act_tr.append(t4)
-                                visit_trans.add(t4)
-                                vis_mark.append(marking)
-        if not semantics.is_enabled(t, net, marking):
-            if not (marking_at_start == marking):
-                result = apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
-                if not isinstance(result, list):
-                    print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned non-list object {result} für Transition {t}")
-                    return [net, marking, act_tr, vis_mark]
-                [net, marking, act_tr, vis_mark] = result
+            hidden_transitions = get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_paths_by_hidden)
+            print(f"Erneute hidden_transitions für Transition {t}: {hidden_transitions}")
+            for z in range(len(hidden_transitions)):
+                for k in range(len(hidden_transitions[z])):
+                    t4 = hidden_transitions[z][k]
+                    print(f"Verarbeite Transition {t4} in Schleife")
+                    if t4 != t and t4 not in visit_trans:
+                        if not semantics.is_enabled(t4, net, marking):
+                            result = apply_hidden_trans(t4, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
+                            print(f"Rekursiver Aufruf result für Transition {t4}: {result}")
+                            if not isinstance(result, list) or len(result) != 4:
+                                print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned invalid object {result} für Transition {t4}")
+                                return [net, marking, act_tr, vis_mark]
+                            [net, marking, act_tr, vis_mark] = result
+                        if semantics.is_enabled(t4, net, marking):
+                            marking = semantics.execute(t4, net, marking)
+                            act_tr.append(t4)
+                            visit_trans.add(t4)
+                            vis_mark.append(marking)
+        if not semantics.is_enabled(t, net, marking) and marking != marking_at_start:
+            result = apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth + 1, visit_trans, vis_mark)
+            print(f"Rekursiver Aufruf result für Transition {t}: {result}")
+            if not isinstance(result, list) or len(result) != 4:
+                print(f"Fehler: Rekursiver Aufruf von apply_hidden_trans returned invalid object {result} für Transition {t}")
+                return [net, marking, act_tr, vis_mark]
+            [net, marking, act_tr, vis_mark] = result
+    print(f"Rückgabe von apply_hidden_trans für Transition {t}: [net, {marking}, {act_tr}, {vis_mark}]")
     return [net, marking, act_tr, vis_mark]
 
 def break_condition_final_marking(marking, final_marking):
@@ -280,10 +285,136 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                         prev_len_activated_transitions = len(act_trans)
                         print(f"Aufruf von apply_hidden_trans für Transition {t}, marking: {marking}")
                         result = apply_hidden_trans(t, net, copy(marking), places_shortest_path_by_hidden, copy(act_trans), 0, copy(visited_transitions), copy(vis_mark))
-                        if not isinstance(result, list):
-                            print(f"Fehler: apply_hidden_trans returned non-list object {result} für Transition {t}")
+                        print(f"apply_hidden_trans result für Transition {t}: {result}")
+                        if not isinstance(result, list) or len(result) != 4:
+                            print(f"Fehler: apply_hidden_trans returned invalid object {result} für Transition {t}")
                             continue  # Überspringe die Iteration, um den Fehler zu vermeiden
                         [net, new_marking, new_act_trans, new_vis_mark] = result
+                        for jj5 in range(len(act_trans), len(new_act_trans)):
+                            tt5 = new_act_trans[jj5]
+                            c, cmap = get_consumed_tokens(tt5)
+                            p, pmap = get_produced_tokens(tt5)
+                            if enable_pltr_fitness:
+                                for pl2 in cmap:
+                                    if pl2 in place_fitness:
+                                        place_fitness[pl2]["c"] += cmap[pl2] * trace_occurrences
+                                for pl2 in pmap:
+                                    if pl2 in place_fitness:
+                                        place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
+                            consumed = consumed + c
+                            produced = produced + p
+                        marking, act_trans, vis_mark = new_marking, new_act_trans, new_vis_mark
+                    is_initially_enabled = True
+                    old_marking_names = [x.name for x in list(marking.keys())]
+                    if not semantics.is_enabled(t, net, marking):
+                        is_initially_enabled = False
+                        transitions_with_problems.append(t)
+                        if stop_immediately_unfit:
+                            missing = missing + 1
+                            break
+                        [m, tokens_added] = add_missing_tokens(t, marking)
+                        missing = missing + m
+                        if enable_pltr_fitness:
+                            for place in tokens_added.keys():
+                                if place in place_fitness:
+                                    place_fitness[place]["underfed_traces"].add(trace)
+                                place_fitness[place]["m"] += tokens_added[place]
+                            if trace not in transition_fitness[t]["underfed_traces"]:
+                                transition_fitness[t]["underfed_traces"][trace] = list()
+                            transition_fitness[t]["underfed_traces"][trace].append(current_event_map)
+                    elif enable_pltr_fitness:
+                        if trace not in transition_fitness[t]["fit_traces"]:
+                            transition_fitness[t]["fit_traces"][trace] = list()
+                        transition_fitness[t]["fit_traces"][trace].append(current_event_map)
+                    c, cmap = get_consumed_tokens(t)
+                    p, pmap = get_produced_tokens(t)
+                    consumed = consumed + c
+                    produced = produced + p
+                    if enable_pltr_fitness:
+                        for pl2 in cmap:
+                            if pl2 in place_fitness:
+                                place_fitness[pl2]["c"] += cmap[pl2] * trace_occurrences
+                        for pl2 in pmap:
+                            if pl2 in place_fitness:
+                                place_fitness[pl2]["p"] += pmap[pl2] * trace_occurrences
+                    if semantics.is_enabled(t, net, marking):
+                        # Speichere aktuelle Markierung mit Zeitstempel der Aktivität
+                        try:
+                            if 'timestamp' not in trace[i]:
+                                raise KeyError(f"Zeitstempel-Schlüssel 'timestamp' nicht im Ereignis gefunden: {trace[i]}")
+                            timestamp = trace[i]['timestamp']
+                        except KeyError as e:
+                            print(f"Fehler beim Zugriff auf Zeitstempel in Spur {i}: {str(e)}")
+                            timestamp = pd.Timestamp.now()  # Fallback-Wert
+                        for place in marking:
+                            place_token_timeline[place].append((timestamp, marking[place]))
+                        # Aktualisiere andere PRC-Metriken
+                        time_diff = trace[i].get('time_diff', 0)
+                        alert = trace[i].get(machine_alert_key, 0) if machine_alert_key else 0
+                        for arc in t.out_arcs:
+                            place = arc.target
+                            if not np.isnan(time_diff):
+                                place_time_diffs[place].append(time_diff)
+                            place_alerts[place].append(alert)
+                            if '0505' in trace[i][activity_key]:
+                                tokens = marking[place]
+                                max_tokens = max([t[1] for t in place_token_timeline[place]] + [1])
+                                place_storage_levels[place].append(tokens / max_tokens)
+                        marking = semantics.execute(t, net, marking)
+                        act_trans.append(t)
+                        vis_mark.append(marking)
+                    if not is_initially_enabled and cleaning_token_flood:
+                        new_marking_names = [x.name for x in list(marking.keys())]
+                        new_marking_names_diff = [x for x in new_marking_names if x not in old_marking_names]
+                        new_marking_names_inte = [x for x in new_marking_names if x in old_marking_names]
+                        for p1 in new_marking_names_inte:
+                            for p2 in new_marking_names_diff:
+                                for comp in s_components:
+                                    if p1 in comp and p2 in comp:
+                                        place_to_delete = [place for place in list(marking.keys()) if place.name == p1]
+                                        if len(place_to_delete) == 1:
+                                            del marking[place_to_delete[0]]
+                                            if not place_to_delete[0] in current_remaining_map:
+                                                current_remaining_map[place_to_delete[0]] = 0
+                                            current_remaining_map[place_to_delete[0]] = current_remaining_map[place_to_delete[0]] + 1
+                else:
+                    if not trace[i][activity_key] in notexisting_activities_in_model:
+                        notexisting_activities_in_model[trace[i][activity_key]] = {}
+                    notexisting_activities_in_model[trace[i][activity_key]][trace] = current_event_map
+            del trace_activities[0]
+            if len(trace_activities) < TechnicalParameters.MAX_POSTFIX_SUFFIX_LENGTH.value:
+                activating_transition_index[str(trace_activities)] = {"index": len(act_trans), "marking": hash(marking)}
+            if i > 0:
+                activating_transition_interval.append([trace[i][activity_key], prev_len_activated_transitions, len(act_trans), trace[i - 1][activity_key]])
+            else:
+                activating_transition_interval.append([trace[i][activity_key], prev_len_activated_transitions, len(act_trans), ""])
+
+    # Überprüfe, ob die Endmarkierung erreicht wurde
+    if try_to_reach_final_marking_through_hidden and not break_condition_final_marking(marking, final_marking):
+        hidden_transitions = get_req_transitions_for_final_marking(marking, final_marking, places_shortest_path_by_hidden)
+        if hidden_transitions:
+            result = enable_hidden_transitions(net, marking, act_trans, visit_trans, vis_mark, hidden_transitions, None)
+            print(f"enable_hidden_transitions result für Endmarkierung: {result}")
+            if not isinstance(result, list) or len(result) != 4:
+                print(f"Fehler: enable_hidden_transitions returned invalid object {result} für Endmarkierung")
+                return [False, 0.0, act_trans, transitions_with_problems, marking, [], missing, consumed, 0, produced]
+            [marking, act_trans, visit_trans, vis_mark] = result
+
+    remaining = 0
+    for place in marking:
+        if place in final_marking:
+            marking[place] = max(0, marking[place] - final_marking[place])
+        if marking[place] > 0:
+            remaining += marking[place]
+            if enable_pltr_fitness:
+                place_fitness[place]["r"] += marking[place]
+                place_fitness[place]["overfed_traces"].add(trace)
+
+    trace_is_fit = len(transitions_with_problems) == 0 and missing == 0 and remaining == 0
+    trace_fitness = 0.5 * (1 - missing / consumed) + 0.5 * (1 - remaining / produced) if consumed > 0 and produced > 0 else 0.0
+
+    enabled_trans_in_mark = list(semantics.enabled_transitions(net, marking))
+    return [trace_is_fit, trace_fitness, act_trans, transitions_with_problems, marking, enabled_trans_in_mark, missing, consumed, remaining, produced]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness, transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None, marking_to_activity_caching=None, is_reduction=False, thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value, cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False, timestamp_key=xes_util.DEFAULT_TIMESTAMP_KEY, machine_alert_key=None, place_token_timeline=None, place_time_diffs=None, place_alerts=None, place_storage_levels=None, place_frequency_counts=None):
@@ -335,7 +466,17 @@ class ApplyTraceTokenReplay:
         self.place_frequency_counts = place_frequency_counts
 
     def run(self):
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced = apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map, self.enable_pltr_fitness, self.place_fitness, self.transition_fitness, self.notexisting_activities_in_model, self.places_shortest_path_by_hidden, self.consider_remaining_in_fitness, activity_key=self.activity_key, try_to_reach_final_marking_through_hidden=self.try_to_reach_final_marking_through_hidden, stop_immediately_unfit=self.stop_immediately_unfit, walk_through_hidden_trans=self.walk_through_hidden_trans, post_fix_caching=self.post_fix_caching, marking_to_activity_caching=self.marking_to_activity_caching, is_reduction=self.is_reduction, thread_maximum_ex_time=self.thread_maximum_ex_time, cleaning_token_flood=self.cleaning_token_flood, s_components=self.s_components, trace_occurrences=self.trace_occurrences, consider_activities_not_in_model_in_fitness=self.consider_activities_not_in_model_in_fitness, timestamp_key=self.timestamp_key, machine_alert_key=self.machine_alert_key, place_token_timeline=self.place_token_timeline, place_time_diffs=self.place_time_diffs, place_alerts=self.place_alerts, place_storage_levels=self.place_storage_levels, place_frequency_counts=self.place_frequency_counts)
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced = apply_trace(
+            self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map, self.enable_pltr_fitness,
+            self.place_fitness, self.transition_fitness, self.notexisting_activities_in_model, self.places_shortest_path_by_hidden,
+            self.consider_remaining_in_fitness, activity_key=self.activity_key, try_to_reach_final_marking_through_hidden=self.try_to_reach_final_marking_through_hidden,
+            stop_immediately_unfit=self.stop_immediately_unfit, walk_through_hidden_trans=self.walk_through_hidden_trans,
+            post_fix_caching=self.post_fix_caching, marking_to_activity_caching=self.marking_to_activity_caching,
+            is_reduction=self.is_reduction, thread_maximum_ex_time=self.thread_maximum_ex_time, cleaning_token_flood=self.cleaning_token_flood,
+            s_components=self.s_components, trace_occurrences=self.trace_occurrences, consider_activities_not_in_model_in_fitness=self.consider_activities_not_in_model_in_fitness,
+            timestamp_key=self.timestamp_key, machine_alert_key=self.machine_alert_key, place_token_timeline=self.place_token_timeline,
+            place_time_diffs=self.place_time_diffs, place_alerts=self.place_alerts, place_storage_levels=self.place_storage_levels,
+            place_frequency_counts=self.place_frequency_counts)
         self.thread_is_alive = False
 
 class PostFixCaching:
@@ -382,12 +523,12 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         places_shortest_path_by_hidden = get_places_shortest_path_by_hidden(net, TechnicalParameters.MAX_REC_DEPTH.value)
     
     # Validierung von places_shortest_path_by_hidden
+    print("Validiere places_shortest_path_by_hidden...")
     for source, targets in places_shortest_path_by_hidden.items():
         for target, transitions in targets.items():
             for trans, weight in transitions:
                 if trans is None or weight is None:
                     print(f"Warnung: Ungültiger Pfad in places_shortest_path_by_hidden: {source} -> {target}, Transition: {trans}, Gewicht: {weight}")
-                    # Entferne ungültige Transitionen
                     transitions[:] = [(t, w) for t, w in transitions if t is not None and w is not None]
     
     place_fitness_per_trace = {}
