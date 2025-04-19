@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from pm4py.objects.log.obj import EventLog
+from pm4py.objects.petri_net.obj import PetriNet, Marking
 from pm4py.algo.conformance.tokenreplay.variants import tbr_prc
 from pm4py.objects.petri_net.utils import petri_utils
 from gplearn.genetic import SymbolicRegressor
