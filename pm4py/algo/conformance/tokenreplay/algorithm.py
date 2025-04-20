@@ -19,7 +19,7 @@ visit <https://www.gnu.org/licenses/>.
 Website: https://processintelligence.solutions
 Contact: info@processintelligence.solutions
 '''
-from pm4py.algo.conformance.tokenreplay.variants import token_replay, backwards
+from pm4py.algo.conformance.tokenreplay.variants import token_replay, backwards, token_replay_prc
 from enum import Enum
 from pm4py.util import exec_utils
 from typing import Optional, Dict, Any, Union
@@ -32,9 +32,10 @@ from pm4py.util import typing
 class Variants(Enum):
     TOKEN_REPLAY = token_replay
     BACKWARDS = backwards
+    TOKEN_REPLAY_PRC = token_replay_prc
 
 VERSIONS = {Variants.TOKEN_REPLAY, Variants.BACKWARDS}
-DEFAULT_VARIANT = Variants.TOKEN_REPLAY
+DEFAULT_VARIANT = Variants.TOKEN_REPLAY_PRC
 
 
 def apply(log: Union[EventLog, EventStream, pd.DataFrame], net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[Any, Any]] = None, variant=DEFAULT_VARIANT) -> typing.ListAlignments:
