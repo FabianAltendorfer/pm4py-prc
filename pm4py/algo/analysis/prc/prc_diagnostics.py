@@ -126,6 +126,19 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
     # Konvertiere DataFrame zu EventLog, falls nötig
     if isinstance(log, pd.DataFrame):
         try:
+            # Validierung der Zeitstempel im DataFrame
+            initial_count = len(log)
+            log = log[log[timestamp_key].notna() & log[timestamp_key].apply(lambda x: isinstance(x, str) and x.strip() != '')]
+            removed_count = initial_count - len(log)
+            if removed_count > 0:
+                log_cleaning_step(
+                    step_name="Zeitstempel-Validierung",
+                    initial_count=initial_count,
+                    removed_count=removed_count,
+                    remaining_count=len(log),
+                    details="Entfernen von Ereignissen mit fehlenden oder ungültigen Zeitstempeln (None oder leer)."
+                )
+            
             log = pm4py.format_dataframe(log, case_id=case_id_key, activity_key=activity_key, timestamp_key=timestamp_key)
             log = pm4py.convert_to_event_log(log)
         except Exception as e:
@@ -147,6 +160,8 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
                 if timestamp_key not in event:
                     raise KeyError(f"Zeitstempel-Schlüssel '{timestamp_key}' nicht im Ereignis gefunden: {event}")
                 timestamp = pd.to_datetime(event[timestamp_key])
+                if pd.isna(timestamp):
+                    raise ValueError(f"Ungültiger Zeitstempel in Ereignis: {event}")
                 timestamps.append(timestamp)
             except (KeyError, ValueError) as e:
                 print(f"Fehler beim Verarbeiten des Zeitstempels für Ereignis in Spur {case_id}: {str(e)}")
@@ -160,10 +175,13 @@ def _preprocess_log(log: Union[EventLog, pd.DataFrame], activity_key: str, times
             try:
                 if timestamp_key not in event:
                     raise KeyError(f"Zeitstempel-Schlüssel '{timestamp_key}' nicht im Ereignis gefunden: {event}")
+                timestamp = pd.to_datetime(event[timestamp_key])
+                if pd.isna(timestamp):
+                    raise ValueError(f"Ungültiger Zeitstempel in Ereignis: {event}")
                 event_data = {
                     'case_id': case_id,
                     'activity': event[activity_key],
-                    'timestamp': pd.to_datetime(event[timestamp_key]),
+                    'timestamp': timestamp,
                     'time_diff': 0.0
                 }
                 event_data['machine_alert'] = event.get(machine_alert_key, 0) if machine_alert_key else 0
