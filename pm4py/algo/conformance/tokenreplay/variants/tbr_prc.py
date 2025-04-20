@@ -147,34 +147,53 @@ def get_req_transitions_for_final_marking(marking, final_marking, places_shortes
                 if transitions:
                     hidden_transitions.append(transitions)
     hidden_transitions = sorted(hidden_transitions, key=lambda x: len(x))
-    return hidden_transitions
+    return hidden_transitionsc
 
-def enable_hidden_transitions(net, marking, activated_transitions, visited_transitions, all_visited_markings, hidden_transitions, t):
-    print(f"enable_hidden_transitions aufgerufen für Transition {t}, hidden_transitions: {hidden_transitions}")
-    j_indexes = [0] * len(hidden_transitions)
+def enable_hidden_transitions(net, marking, activated_transitions, visited_transitions, all_visited_markings,
+                              hidden_transitions_to_enable, t):
+    """
+    Actually enable hidden transitions on the Petri net
+
+    Parameters
+    -----------
+    net
+        Petri net
+    marking
+        Current marking
+    activated_transitions
+        All activated transitions during the replay
+    visited_transitions
+        All visited transitions by the recursion
+    all_visited_markings
+        All visited markings
+    hidden_transitions_to_enable
+        List of hidden transition to enable
+    t
+        Transition against we should check if they are enabled
+    """
+    j_indexes = [0] * len(hidden_transitions_to_enable)
     for z in range(10000000):
         something_changed = False
-        path_index = z % len(hidden_transitions)
-        if j_indexes[path_index] < len(hidden_transitions[path_index]):
-            t3 = hidden_transitions[path_index][j_indexes[path_index]]
-            print(f"Verarbeite Transition {t3} in enable_hidden_transitions")
-            if t3 != t and t3 not in visited_transitions and semantics.is_enabled(t3, net, marking):
-                marking = semantics.execute(t3, net, marking)
-                activated_transitions.append(t3)
-                visited_transitions.add(t3)
-                all_visited_markings.append(marking)
-                something_changed = True
-            j_indexes[path_index] += 1
-            if t is not None and semantics.is_enabled(t, net, marking):
+        for k in range(j_indexes[z % len(hidden_transitions_to_enable)], len(
+                hidden_transitions_to_enable[z % len(hidden_transitions_to_enable)])):
+            t3 = hidden_transitions_to_enable[z % len(hidden_transitions_to_enable)][
+                j_indexes[z % len(hidden_transitions_to_enable)]]
+            if not t3 == t:
+                if semantics.is_enabled(t3, net, marking):
+                    if t3 not in visited_transitions:
+                        marking = semantics.execute(t3, net, marking)
+                        activated_transitions.append(t3)
+                        visited_transitions.add(t3)
+                        all_visited_markings.append(marking)
+                        something_changed = True
+            j_indexes[z % len(hidden_transitions_to_enable)] = j_indexes[z % len(hidden_transitions_to_enable)] + 1
+            if semantics.is_enabled(t, net, marking):
                 break
+        if semantics.is_enabled(t, net, marking):
+            break
         if not something_changed:
             break
-    result = [marking, activated_transitions, visited_transitions, all_visited_markings]
-    print(f"enable_hidden_transitions Rückgabewert für Transition {t}: {result}")
-    if not isinstance(result, list) or len(result) != 4:
-        print(f"Fehler: enable_hidden_transitions returned invalid object {result} für Transition {t}")
-        return [marking, activated_transitions, visited_transitions, all_visited_markings]
-    return result
+    return [marking, activated_transitions, visited_transitions, all_visited_markings]
 
 def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth, visit_trans, vis_mark):
     print(f"apply_hidden_trans aufgerufen für Transition {t}, rec_depth: {rec_depth}, marking: {marking}")
