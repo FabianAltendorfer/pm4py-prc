@@ -867,7 +867,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         progress = tqdm(total=len(log), desc="replaying log with TBR, completed traces :: ")
 
     if pandas_utils.check_is_pandas_dataframe(log):
-        traces = [(case_id, list(group[activity_key]), group) for case_id, group in log.groupby(case_id_key)]
+        traces = [(case_id, list(group[activity_key]), group.to_dict('records')) for case_id, group in log.groupby(case_id_key)]
     else:
         traces = [(trace.attributes[case_id_key], [event[activity_key] for event in trace], trace) for trace in log]
 
