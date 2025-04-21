@@ -393,18 +393,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                 global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
     """
     Modified apply_trace to update global place capacities based on overlapping timestamps.
-    
-    Parameters
-    ----------
-    [Existing parameters unchanged]
-    events_by_timestamp : dict
-        Dictionary mapping timestamps to lists of (case_id, event_index, event, next_timestamp) tuples.
-    global_place_counts : dict
-        Global dictionary to track current token counts per timestamp.
-    global_place_capacities : dict
-        Global dictionary to store maximum place capacities across all timestamps.
-    timestamp_key : str
-        Key for timestamp.
     """
     sorted_events = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
 
@@ -427,44 +415,44 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         place_capacities[place]['max'] = tokens
 
     for i, event in enumerate(sorted_events):
-            prev_len_activated_transitions = len(act_trans)
-            if event[activity_key] in trans_map:
-                t = trans_map[event[activity_key]]
-                current_event_map.update(event)
+        prev_len_activated_transitions = len(act_trans)
+        if event[activity_key] in trans_map:
+            t = trans_map[event[activity_key]]
+            current_event_map.update(event)
 
-                # Get overlapping events
-                overlapping_events = get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_key)
-                
-                # Update global place counts for this timestamp
-                current_timestamp = event[timestamp_key]
-                if current_timestamp not in global_place_counts:
-                    global_place_counts[current_timestamp] = {place: 0 for place in net.places}
-                
-                temp_marking = copy(initial_marking)
-                for overlap_event in overlapping_events:
-                    if overlap_event[activity_key] in trans_map:
-                        overlap_t = trans_map[overlap_event[activity_key]]
-                        if semantics.is_enabled(overlap_t, net, temp_marking):
-                            c, cmap = get_consumed_tokens(overlap_t)
-                            p, pmap = get_produced_tokens(overlap_t)
-                            temp_marking = semantics.execute(overlap_t, net, temp_marking)
-                            for place in cmap:
-                                global_place_counts[current_timestamp][place] -= cmap[place]
-                            for place in pmap:
-                                global_place_counts[current_timestamp][place] += pmap[place]
+            # Get overlapping events
+            overlapping_events = get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_key)
+            
+            # Update global place counts for this timestamp
+            current_timestamp = event[timestamp_key]
+            if current_timestamp not in global_place_counts:
+                global_place_counts[current_timestamp] = {place: 0 for place in net.places}
+            
+            temp_marking = copy(initial_marking)
+            for overlap_event in overlapping_events:
+                if overlap_event[activity_key] in trans_map:
+                    overlap_t = trans_map[overlap_event[activity_key]]
+                    if semantics.is_enabled(overlap_t, net, temp_marking):
+                        c, cmap = get_consumed_tokens(overlap_t)
+                        p, pmap = get_produced_tokens(overlap_t)
+                        temp_marking = semantics.execute(overlap_t, net, temp_marking)
+                        for place in cmap:
+                            global_place_counts[current_timestamp][place] -= cmap[place]
+                        for place in pmap:
+                            global_place_counts[current_timestamp][place] += pmap[place]
 
-                # Debugging für einen spezifischen Platz
-                target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"  # Ersetze mit deinem Platz
-                for place in net.places:
-                    if place.name == target_place_name:
-                        if place not in global_place_capacities:
-                            global_place_capacities[place] = {'max': 0}
-                        if global_place_counts[current_timestamp][place] > global_place_capacities[place]['max']:
-                            global_place_capacities[place]['max'] = global_place_counts[current_timestamp][place]
-                            # Protokolliere Cases und Zeitstempel
-                            case_ids = [evt["case:concept:name"] for evt in overlapping_events if evt[activity_key] in trans_map]
-                            print(f"New max capacity for {place.name} at {current_timestamp}: {global_place_counts[current_timestamp][place]} tokens")
-                            print(f"Contributing cases: {case_ids}")
+            # Debugging für einen spezifischen Platz
+            target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"  # Ersetze mit deinem Platz
+            for place in net.places:
+                if place.name == target_place_name:
+                    if place not in global_place_capacities:
+                        global_place_capacities[place] = {'max': 0}
+                    if global_place_counts[current_timestamp][place] > global_place_capacities[place]['max']:
+                        global_place_capacities[place]['max'] = global_place_counts[current_timestamp][place]
+                        # Protokolliere Cases und Zeitstempel
+                        case_ids = [evt["case:concept:name"] for evt in overlapping_events if evt[activity_key] in trans_map]
+                        print(f"New max capacity for {place.name} at {current_timestamp}: {global_place_counts[current_timestamp][place]} tokens")
+                        print(f"Contributing cases: {case_ids}")
 
             # Process current event
             if not semantics.is_enabled(t, net, marking):
@@ -511,10 +499,10 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                     if pl in place_fitness:
                         place_fitness[pl]["p"] += pmap[pl] * trace_occurrences
 
-            else:
-                if event[activity_key] not in notexisting_activities_in_model:
-                    notexisting_activities_in_model[event[activity_key]] = {}
-                notexisting_activities_in_model[event[activity_key]][trace] = current_event_map
+        else:
+            if event[activity_key] not in notexisting_activities_in_model:
+                notexisting_activities_in_model[event[activity_key]] = {}
+            notexisting_activities_in_model[event[activity_key]][trace] = current_event_map
 
         trace_activities = [e[activity_key] for e in sorted_events[i:]]
         if len(trace_activities) < 20:
