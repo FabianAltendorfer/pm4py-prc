@@ -511,10 +511,10 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                     if pl in place_fitness:
                         place_fitness[pl]["p"] += pmap[pl] * trace_occurrences
 
-        else:
-            if event[activity_key] not in notexisting_activities_in_model:
-                notexisting_activities_in_model[event[activity_key]] = {}
-            notexisting_activities_in_model[event[activity_key]][trace] = current_event_map
+            else:
+                if event[activity_key] not in notexisting_activities_in_model:
+                    notexisting_activities_in_model[event[activity_key]] = {}
+                notexisting_activities_in_model[event[activity_key]][trace] = current_event_map
 
         trace_activities = [e[activity_key] for e in sorted_events[i:]]
         if len(trace_activities) < 20:
