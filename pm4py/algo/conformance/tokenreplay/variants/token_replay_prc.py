@@ -416,6 +416,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
 
     # Debugging-Informationen sammeln
     debug_data = []
+    place_activity_data = []  # Neu: Für Cases, die den Zielplatz passieren
 
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
@@ -472,6 +473,20 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                             "contributing_cases": [info["case_id"] for info in case_info],
                             "next_activities": [info["next_activity"] for info in case_info]
                         })
+
+            # Sammle Daten für alle Cases, die den Zielplatz passieren
+            target_transition = "E5GAG45_H5GGML56"  # Eingehende Transition des Platzes
+            if event[activity_key] == target_transition:
+                case_id = event["case:concept:name"]
+                next_activity = "None"
+                if i + 1 < len(sorted_events):
+                    next_activity = sorted_events[i + 1][activity_key]
+                place_activity_data.append({
+                    "case_id": case_id,
+                    "timestamp": event[timestamp_key],
+                    "activity": event[activity_key],
+                    "next_activity": next_activity
+                })
 
             # [Rest der bestehenden Logik unverändert]
             if not semantics.is_enabled(t, net, marking):
@@ -582,7 +597,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
             semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities, debug_data]  # Füge debug_data hinzu
+            place_max_capacities, debug_data, place_activity_data]  # Füge place_activity_data hinzu
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
@@ -594,7 +609,6 @@ class ApplyTraceTokenReplay:
                  cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                  consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
                  global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
-        # [Vorheriger Code unverändert]
         self.thread_is_alive = True
         self.trace = trace
         self.net = net
@@ -633,7 +647,8 @@ class ApplyTraceTokenReplay:
         self.remaining = None
         self.produced = None
         self.place_max_capacities = None
-        self.debug_data = None  # Neu hinzugefügt
+        self.debug_data = None
+        self.place_activity_data = None  # Neu hinzugefügt
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
         self.events_by_timestamp = events_by_timestamp
@@ -645,14 +660,14 @@ class ApplyTraceTokenReplay:
         """
         Runs the thread and stores the results
         """
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data = \
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data, self.place_activity_data = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
                         self.places_shortest_path_by_hidden, self.consider_remaining_in_fitness,
                         activity_key=self.activity_key,
                         try_to_reach_final_marking_through_hidden=self.try_to_reach_final_marking_through_hidden,
-                        stop_immediately_unfit=self.stop_immediately_when_unfit,
+                        stop_immediately_when_unfit=self.stop_immediately_when_unfit,
                         walk_through_hidden_trans=self.walk_through_hidden_trans,
                         post_fix_caching=self.post_fix_caching,
                         marking_to_activity_caching=self.marking_to_activity_caching,
@@ -729,7 +744,8 @@ def transcribe_result(t, return_object_names=True):
         "remaining_tokens": int(t.remaining),
         "produced_tokens": int(t.produced),
         "place_max_capacities": copy(t.place_max_capacities),
-        "debug_data": copy(t.debug_data)  # Neu hinzugefügt
+        "debug_data": copy(t.debug_data),
+        "place_activity_data": copy(t.place_activity_data)  # Neu hinzugefügt
     }
 
     if return_object_names:
@@ -749,7 +765,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               is_reduction=False, thread_maximum_ex_time=10,
               cleaning_token_flood=False, disable_variants=False, return_object_names=False, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME):
-    import pandas as pd  # Für CSV-Ausgabe
+    import pandas as pd
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
@@ -783,7 +799,6 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
             for idx, row in sorted_group.iterrows():
                 event = row.to_dict()
                 ts = event["time:timestamp"]
-                # Find next event's timestamp
                 next_ts = None
                 if idx + 1 < len(sorted_group):
                     next_row = sorted_group.iloc[sorted_group.index.get_loc(idx) + 1]
@@ -807,6 +822,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     global_place_counts = {}
     global_place_capacities = {}
     all_debug_data = []
+    all_place_activity_data = []  # Neu hinzugefügt
 
     # Process each trace individually
     threads_results = {}
@@ -826,7 +842,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                   transition_fitness_per_trace, notexisting_activities_in_model,
                                   places_shortest_path_by_hidden, consider_remaining_in_fitness,
                                   activity_key=activity_key, reach_mark_through_hidden=reach_mark_through_hidden,
-                                  stop_immediately_when_unfit=stop_immediately_unfit,
+                                  stop_immediately_unfit=stop_immediately_unfit,
                                   walk_through_hidden_trans=walk_through_hidden_trans,
                                   post_fix_caching=post_fix_cache, marking_to_activity_caching=marking_to_activity_cache,
                                   is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
@@ -836,7 +852,8 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                   global_place_capacities=global_place_capacities, timestamp_key="time:timestamp")
         t.run()
         threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
-        all_debug_data.extend(threads_results[i]["debug_data"])  # Sammle Debugging-Daten
+        all_debug_data.extend(threads_results[i]["debug_data"])
+        all_place_activity_data.extend(threads_results[i]["place_activity_data"])  # Sammle place_activity_data
         if progress:
             progress.update()
 
@@ -848,6 +865,43 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         debug_df = pd.DataFrame(all_debug_data)
         debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
         print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
+
+    # Speichere place_activity_data als CSV
+    if all_place_activity_data:
+        place_activity_df = pd.DataFrame(all_place_activity_data)
+        place_activity_df.to_csv("../Ergebnisse_PRC/place_activity_log.csv", index=False)
+        print(f"Place activity log saved to '../Ergebnisse_PRC/place_activity_log.csv'")
+
+    # Erstelle CSV mit der letzten Aktivität der contributing_cases
+    if all_debug_data:
+        contributing_cases = set()
+        for debug_entry in all_debug_data:
+            for case_id in debug_entry["contributing_cases"]:
+                contributing_cases.add(case_id)
+        last_activity_data = []
+        if pandas_utils.check_is_pandas_dataframe(log):
+            for case_id, group in log.groupby(case_id_key):
+                if case_id in contributing_cases:
+                    last_event = group.sort_values("time:timestamp").iloc[-1]
+                    last_activity_data.append({
+                        "case_id": case_id,
+                        "last_activity": last_event[activity_key],
+                        "last_timestamp": last_event[timestamp_key]
+                    })
+        else:
+            for trace in log:
+                case_id = trace.attributes[case_id_key]
+                if case_id in contributing_cases:
+                    last_event = max(trace, key=lambda x: x.get("time:timestamp", 0))
+                    last_activity_data.append({
+                        "case_id": case_id,
+                        "last_activity": last_event[activity_key],
+                        "last_timestamp": last_event[timestamp_key]
+                    })
+        if last_activity_data:
+            last_activity_df = pd.DataFrame(last_activity_data)
+            last_activity_df.to_csv("../Ergebnisse_PRC/contributing_cases_last_activity.csv", index=False)
+            print(f"Last activity data saved to '../Ergebnisse_PRC/contributing_cases_last_activity.csv'")
 
     if progress:
         progress.close()
