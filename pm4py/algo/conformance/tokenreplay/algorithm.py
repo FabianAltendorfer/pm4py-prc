@@ -59,6 +59,7 @@ def apply(log: Union[EventLog, EventStream, pd.DataFrame], net: PetriNet, initia
         Variant of the algorithm to use:
             - Variants.TOKEN_REPLAY
             - Variants.BACKWARDS
+            - Variants.TOKEN_REPLAY_PRC
     """
     if parameters is None:
         parameters = {}
