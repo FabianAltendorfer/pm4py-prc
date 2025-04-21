@@ -394,7 +394,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     """
     Modified apply_trace to update global place capacities based on overlapping timestamps.
     """
-    import pandas as pd  # Für CSV-Ausgabe
     sorted_events = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
 
     act_trans = []
@@ -532,12 +531,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         else:
             activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), ""])
 
-    # Speichere Debugging-Informationen als CSV
-    if debug_data:
-        debug_df = pd.DataFrame(debug_data)
-        debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
-        print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
-
     # [Restlicher Code unverändert]
     marking_before_cleaning = copy(marking)
     diff_fin_mark_mark = Marking()
@@ -589,7 +582,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
             semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities]
+            place_max_capacities, debug_data]  # Füge debug_data hinzu
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
@@ -601,66 +594,7 @@ class ApplyTraceTokenReplay:
                  cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                  consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
                  global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
-        """
-        Constructor
-
-        Parameters
-        ----------
-        trace
-            Trace
-        net
-            Petri net
-        initial_marking
-            Initial marking
-        final_marking
-            Final marking
-        trans_map
-            Map between transitions labels and transitions
-        enable_pltr_fitness
-            Enable fitness retrieval at place/transition level
-        place_fitness
-            Current dictionary of places associated with unfit traces
-        transition_fitness
-            Current dictionary of transitions associated with unfit traces
-        notexisting_activities_in_model
-            Map that stores the notexisting activities in the model triggered in the log
-        places_shortest_path_by_hidden
-            Shortest paths between places by hidden transitions
-        consider_remaining_in_fitness
-            Boolean value telling if the remaining tokens should be considered in fitness evaluation
-        activity_key
-            Name of the attribute that contains the activity
-        reach_mark_through_hidden
-            Boolean value that decides if we shall try to reach the final marking through hidden transitions
-        stop_immediately_when_unfit
-            Boolean value that decides if we shall stop immediately when a non-conformance is detected
-        walk_through_hidden_trans
-            Boolean value that decides if we shall walk through hidden transitions to enable visible transitions
-        post_fix_caching
-            Stores the post fix caching object
-        marking_to_activity_caching
-            Stores the marking-to-activity cache
-        is_reduction
-            Expresses if the token-based replay is called in a reduction attempt
-        thread_maximum_ex_time
-            Alignment threads maximum allowed execution time
-        cleaning_token_flood
-            Decides if a cleaning of the token flood shall be operated
-        s_components
-            S-components of the Petri net
-        trace_occurrences
-            Trace weight (number of occurrences)
-        consider_activities_not_in_model_in_fitness
-            Boolean value that affects fitness calculation
-        events_by_timestamp
-            Dictionary mapping timestamps to lists of (case_id, event_index, event, next_timestamp) tuples
-        global_place_counts
-            Global dictionary to track current token counts per timestamp
-        global_place_capacities
-            Global dictionary to store maximum place capacities across all timestamps
-        timestamp_key
-            Key for timestamp
-        """
+        # [Vorheriger Code unverändert]
         self.thread_is_alive = True
         self.trace = trace
         self.net = net
@@ -698,6 +632,8 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
+        self.place_max_capacities = None
+        self.debug_data = None  # Neu hinzugefügt
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
         self.events_by_timestamp = events_by_timestamp
@@ -709,7 +645,7 @@ class ApplyTraceTokenReplay:
         """
         Runs the thread and stores the results
         """
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities = \
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
@@ -781,37 +717,28 @@ def get_variant_from_trace(trace, activity_key, disable_variants=False):
 
 
 def transcribe_result(t, return_object_names=True):
-    corr_value = {"trace_is_fit": copy(t.t_fit),
-                  "trace_fitness": float(copy(t.t_value)),
-                  "activated_transitions": copy(t.act_trans),
-                  "reached_marking": copy(t.reached_marking),
-                  "enabled_transitions_in_marking": copy(
-                      t.enabled_trans_in_mark),
-                  "transitions_with_problems": copy(
-                      t.trans_probl),
-                  "missing_tokens": int(t.missing),
-                  "consumed_tokens": int(t.consumed),
-                  "remaining_tokens": int(t.remaining),
-                  "produced_tokens": int(t.produced)}
+    corr_value = {
+        "trace_is_fit": copy(t.t_fit),
+        "trace_fitness": float(copy(t.t_value)),
+        "activated_transitions": copy(t.act_trans),
+        "reached_marking": copy(t.reached_marking),
+        "enabled_transitions_in_marking": copy(t.enabled_trans_in_mark),
+        "transitions_with_problems": copy(t.trans_probl),
+        "missing_tokens": int(t.missing),
+        "consumed_tokens": int(t.consumed),
+        "remaining_tokens": int(t.remaining),
+        "produced_tokens": int(t.produced),
+        "place_max_capacities": copy(t.place_max_capacities),
+        "debug_data": copy(t.debug_data)  # Neu hinzugefügt
+    }
 
     if return_object_names:
-        corr_value["activated_transitions_labels"] = [x.label for x in
-                                                      corr_value[
-                                                          "activated_transitions"]]
-        corr_value["activated_transitions"] = [x.name for x in corr_value[
-            "activated_transitions"]]
-        corr_value["enabled_transitions_in_marking_labels"] = [x.label for x in
-                                                               corr_value[
-                                                                   "enabled_transitions_in_marking"]]
-        corr_value["enabled_transitions_in_marking"] = [x.name for x in
-                                                        corr_value[
-                                                            "enabled_transitions_in_marking"]]
-        corr_value["transitions_with_problems"] = [x.name for x in
-                                                   corr_value[
-                                                       "transitions_with_problems"]]
-        corr_value["reached_marking"] = {x.name: y for x, y in
-                                         corr_value[
-                                             "reached_marking"].items()}
+        corr_value["activated_transitions_labels"] = [x.label for x in corr_value["activated_transitions"]]
+        corr_value["activated_transitions"] = [x.name for x in corr_value["activated_transitions"]]
+        corr_value["enabled_transitions_in_marking_labels"] = [x.label for x in corr_value["enabled_transitions_in_marking"]]
+        corr_value["enabled_transitions_in_marking"] = [x.name for x in corr_value["enabled_transitions_in_marking"]]
+        corr_value["transitions_with_problems"] = [x.name for x in corr_value["transitions_with_problems"]]
+        corr_value["reached_marking"] = {x.name: y for x, y in corr_value["reached_marking"].items()}
 
     return corr_value
 
@@ -822,6 +749,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               is_reduction=False, thread_maximum_ex_time=10,
               cleaning_token_flood=False, disable_variants=False, return_object_names=False, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME):
+    import pandas as pd  # Für CSV-Ausgabe
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
@@ -875,9 +803,10 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                     events_by_timestamp[ts] = []
                 events_by_timestamp[ts].append((trace.attributes[case_id_key], j, event, next_ts))
 
-    # Initialize global place counts and capacities
+    # Initialize global place counts, capacities, and debug data
     global_place_counts = {}
     global_place_capacities = {}
+    all_debug_data = []
 
     # Process each trace individually
     threads_results = {}
@@ -904,14 +833,21 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                   cleaning_token_flood=cleaning_token_flood, s_components=s_components,
                                   trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
                                   events_by_timestamp=events_by_timestamp, global_place_counts=global_place_counts,
-                                  global_place_capacities=global_place_capacities)
+                                  global_place_capacities=global_place_capacities, timestamp_key="time:timestamp")
         t.run()
         threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
+        all_debug_data.extend(threads_results[i]["debug_data"])  # Sammle Debugging-Daten
         if progress:
             progress.update()
 
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
+
+    # Speichere Debugging-Informationen als CSV
+    if all_debug_data:
+        debug_df = pd.DataFrame(all_debug_data)
+        debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
+        print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
 
     if progress:
         progress.close()
