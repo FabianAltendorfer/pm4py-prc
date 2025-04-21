@@ -573,16 +573,21 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
-                 transition_fitness, notexisting_activities_in_model,
-                 places_shortest_path_by_hidden, consider_remaining_in_fitness, activity_key="concept:name",
-                 reach_mark_through_hidden=True, stop_immediately_when_unfit=False,
-                 walk_through_hidden_trans=True, post_fix_caching=None,
+                 transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden,
+                 consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True,
+                 stop_immediately_when_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None,
                  marking_to_activity_caching=None, is_reduction=False,
                  thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value,
-                 cleaning_token_flood=False, s_components=None, trace_occurrences=1, consider_activities_not_in_model_in_fitness=False):
+                 cleaning_token_flood=False, s_components=None, trace_occurrences=1,
+                 consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
+                 global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
         """
         Constructor
 
+        Parameters
+        ----------
+        trace
+            Trace
         net
             Petri net
         initial_marking
@@ -598,20 +603,19 @@ class ApplyTraceTokenReplay:
         transition_fitness
             Current dictionary of transitions associated with unfit traces
         notexisting_activities_in_model
-            Map that stores the notexisting activities in the model
-            triggered in the log
+            Map that stores the notexisting activities in the model triggered in the log
         places_shortest_path_by_hidden
             Shortest paths between places by hidden transitions
         consider_remaining_in_fitness
             Boolean value telling if the remaining tokens should be considered in fitness evaluation
         activity_key
             Name of the attribute that contains the activity
-        try_to_reach_final_marking_through_hidden
+        reach_mark_through_hidden
             Boolean value that decides if we shall try to reach the final marking through hidden transitions
-        stop_immediately_unfit
+        stop_immediately_when_unfit
             Boolean value that decides if we shall stop immediately when a non-conformance is detected
         walk_through_hidden_trans
-            Boolean value that decides if we shall walk through hidden transitions in order to enable visible transitions
+            Boolean value that decides if we shall walk through hidden transitions to enable visible transitions
         post_fix_caching
             Stores the post fix caching object
         marking_to_activity_caching
@@ -626,6 +630,16 @@ class ApplyTraceTokenReplay:
             S-components of the Petri net
         trace_occurrences
             Trace weight (number of occurrences)
+        consider_activities_not_in_model_in_fitness
+            Boolean value that affects fitness calculation
+        events_by_timestamp
+            Dictionary mapping timestamps to lists of (case_id, event_index, event, next_timestamp) tuples
+        global_place_counts
+            Global dictionary to track current token counts per timestamp
+        global_place_capacities
+            Global dictionary to store maximum place capacities across all timestamps
+        timestamp_key
+            Key for timestamp
         """
         self.thread_is_alive = True
         self.trace = trace
@@ -666,6 +680,10 @@ class ApplyTraceTokenReplay:
         self.produced = None
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
+        self.events_by_timestamp = events_by_timestamp
+        self.global_place_counts = global_place_counts
+        self.global_place_capacities = global_place_capacities
+        self.timestamp_key = timestamp_key
 
     def run(self):
         """
@@ -689,7 +707,11 @@ class ApplyTraceTokenReplay:
                         cleaning_token_flood=self.cleaning_token_flood,
                         s_components=self.s_components,
                         trace_occurrences=self.trace_occurrences,
-                        consider_activities_not_in_model_in_fitness=self.consider_activities_not_in_model_in_fitness)
+                        consider_activities_not_in_model_in_fitness=self.consider_activities_not_in_model_in_fitness,
+                        events_by_timestamp=self.events_by_timestamp,
+                        global_place_counts=self.global_place_counts,
+                        global_place_capacities=self.global_place_capacities,
+                        timestamp_key=self.timestamp_key)
         self.thread_is_alive = False
 
 
