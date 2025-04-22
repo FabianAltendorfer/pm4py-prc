@@ -234,16 +234,34 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
     global_marking = copy(initial_marking)
     place_max_capacities = {place: global_marking.get(place, 0) for place in net.places}
     
+    # Neue Liste für Debugging-Informationen zur Kapazitätszusammensetzung
+    capacity_composition = []
+    target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"
+    
     for ts, case_id, event in all_events:
         if event[activity_key] in trans_map:
             t = trans_map[event[activity_key]]
             if semantics.is_enabled(t, net, global_marking):
                 global_marking = semantics.execute(t, net, global_marking)
+                # Überprüfen, ob Token in den Zielplatz eingefügt wurden
                 for place in global_marking:
                     if global_marking[place] > place_max_capacities[place]:
                         place_max_capacities[place] = global_marking[place]
+                        # Für den Zielplatz zusätzliche Informationen speichern
+                        if place.name == target_place_name:
+                            # Ermittle eingehende Transitionen, die Token produziert haben
+                            produced_tokens = get_produced_tokens(t)[1]
+                            if place in produced_tokens:
+                                capacity_composition.append({
+                                    "place": place.name,
+                                    "timestamp": ts,
+                                    "case_id": case_id,
+                                    "transition": t.label,
+                                    "tokens_added": produced_tokens[place],
+                                    "new_max_capacity": global_marking[place]
+                                })
     
-    return place_max_capacities
+    return place_max_capacities, capacity_composition
 
 def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
                 transition_fitness, notexisting_activities_in_model,
@@ -564,11 +582,18 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
 
-    # Änderung hier: case_id_key als Parameter übergeben
-    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
+    # Änderung: Zwei Rückgabewerte von compute_global_place_capacities
+    global_place_capacities, capacity_composition = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
     all_debug_data = []
     all_place_activity_data = []
 
+    # Speichere capacity_composition als CSV
+    if capacity_composition:
+        capacity_df = pd.DataFrame(capacity_composition)
+        capacity_df.to_csv("../Ergebnisse_PRC/place_capacity_composition.csv", index=False)
+        print(f"Capacity composition data saved to '../Ergebnisse_PRC/place_capacity_composition.csv'")
+
+    # Rest des Codes bleibt unverändert
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
