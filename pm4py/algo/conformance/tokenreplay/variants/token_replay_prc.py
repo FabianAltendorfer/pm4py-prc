@@ -417,6 +417,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     # Debugging-Informationen sammeln
     debug_data = []
     place_activity_data = []
+    seen_cases_by_timestamp = {}  # Verfolge case_ids pro Zeitstempel
 
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
@@ -455,7 +456,10 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                         global_place_capacities[place]['max'] = global_place_counts[current_timestamp][place]
                         # Sammle Debugging-Informationen
                         case_info = []
-                        seen_cases = set()  # Verfolge bereits gezählte case_ids
+                        if current_timestamp not in seen_cases_by_timestamp:
+                            seen_cases_by_timestamp[current_timestamp] = set()  # Initialisiere für den Zeitstempel
+                        seen_cases = seen_cases_by_timestamp[current_timestamp]
+                        print(f"Processing timestamp {current_timestamp}, overlapping events: {len(overlapping_events)}")
                         for evt in overlapping_events:
                             if evt[activity_key] in trans_map:
                                 case_id = evt["case:concept:name"]
@@ -469,6 +473,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                                                 next_activity = sorted_events[j + 1][activity_key]
                                             break
                                     case_info.append({"case_id": case_id, "next_activity": next_activity})
+                                    print(f"Added case_id: {case_id}, next_activity: {next_activity}")
                         debug_data.append({
                             "place": place.name,
                             "timestamp": current_timestamp,
@@ -477,6 +482,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                             "next_activities": [info["next_activity"] for info in case_info]
                         })
 
+            # Sammle Daten für alle Cases, die den Zielplatz passieren
             target_transition = "E5GAG45_H5GGML56"
             if event[activity_key] == target_transition:
                 case_id = event["case:concept:name"]
@@ -548,6 +554,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         else:
             activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), ""])
 
+    # [Restlicher Code unverändert]
     marking_before_cleaning = copy(marking)
     diff_fin_mark_mark = Marking()
     for p in final_marking:
