@@ -881,32 +881,32 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         place_activity_df.to_csv("../Ergebnisse_PRC/place_activity_log.csv", index=False)
         print(f"Place activity log saved to '../Ergebnisse_PRC/place_activity_log.csv'")
 
-    # Erstelle CSV mit der letzten Aktivität der contributing_cases
+    # Erstelle CSV mit der letzten Aktivität und Event-Sequenzen der contributing_cases
     if all_debug_data:
         contributing_cases = set()
         for debug_entry in all_debug_data:
             for case_id in debug_entry["contributing_cases"]:
                 contributing_cases.add(case_id)
         last_activity_data = []
-        event_sequence_data = []  # Neu: Für die Event-Sequenzen der contributing_cases
+        event_sequence_data = []
         if pandas_utils.check_is_pandas_dataframe(log):
             for case_id, group in log.groupby(case_id_key):
                 if case_id in contributing_cases:
                     # Letzte Aktivität
-                    last_event = group.sort_values(timestamp_key).iloc[-1]
+                    sorted_group = group.sort_values(timestamp_key)
+                    last_event = sorted_group.iloc[-1]
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
                     # Event-Sequenz
-                    sorted_group = group.sort_values(timestamp_key)
-                    for idx, row in sorted_group.iterrows():
-                        event = row.to_dict()
+                    for j, row in enumerate(sorted_group.to_dict('records')):
+                        event = row
                         next_activity = "None"
-                        if idx + 1 < len(sorted_group):
-                            next_row = sorted_group.iloc[sorted_group.index.get_loc(idx) + 1]
-                            next_activity = next_row[activity_key]
+                        if j + 1 < len(sorted_group):
+                            next_event = sorted_group.iloc[j + 1]
+                            next_activity = next_event[activity_key]
                         event_sequence_data.append({
                             "case_id": case_id,
                             "activity": event[activity_key],
@@ -918,14 +918,14 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                 case_id = trace.attributes[case_id_key]
                 if case_id in contributing_cases:
                     # Letzte Aktivität
-                    last_event = max(trace, key=lambda x: x.get(timestamp_key, 0))
+                    sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
+                    last_event = sorted_trace[-1]
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
                     # Event-Sequenz
-                    sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
                     for j, event in enumerate(sorted_trace):
                         next_activity = "None"
                         if j + 1 < len(sorted_trace):
@@ -956,7 +956,6 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         return aligned_traces, place_fitness_per_trace, transition_fitness_per_trace, notexisting_activities_in_model
     else:
         return aligned_traces
-
 
 def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[Union[str, Parameters], Any]] = None) -> typing.ListAlignments:
     """
