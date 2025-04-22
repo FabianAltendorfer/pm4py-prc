@@ -214,9 +214,9 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
             overlapping.append(evt)
     return overlapping
 
-def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
+ddef compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
-    # Dictionary zur Speicherung der Events pro Case für die Ermittlung der Folgeaktivität
+    # Dictionary zur Speicherung der Events pro Case
     events_by_case = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
@@ -241,6 +241,7 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
     # Liste für Debugging-Informationen zur Kapazitätszusammensetzung
     capacity_composition = []
     target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"
+    outgoing_transition = "E5GAG45_H5GGML5F"  # Angenommene ausgehende Transition basierend auf Platzname
     
     for ts, case_id, event in all_events:
         if event[activity_key] in trans_map:
@@ -253,15 +254,16 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
                         place_max_capacities[place] = global_marking[place]
                         # Für den Zielplatz zusätzliche Informationen speichern
                         if place.name == target_place_name:
-                            # Ermittle die nächste Aktivität und deren Zeitstempel
-                            next_activity = "None"
-                            next_timestamp = None
+                            # Ermittle den Zeitstempel des nächsten Events mit der ausgehenden Transition
+                            next_place_timestamp = None
                             case_events = events_by_case[case_id]
                             for i, (evt_ts, evt) in enumerate(case_events):
                                 if evt_ts == ts and evt[activity_key] == event[activity_key]:
-                                    if i + 1 < len(case_events):
-                                        next_activity = case_events[i + 1][1][activity_key]
-                                        next_timestamp = case_events[i + 1][0]
+                                    # Suche nach dem nächsten Event mit der ausgehenden Transition
+                                    for j in range(i + 1, len(case_events)):
+                                        if case_events[j][1][activity_key] == outgoing_transition:
+                                            next_place_timestamp = case_events[j][0]
+                                            break
                                     break
                             # Speichere Informationen
                             capacity_composition.append({
@@ -271,8 +273,7 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
                                 "transition": t.label,
                                 "tokens_added": get_produced_tokens(t)[1].get(place, 0),
                                 "new_max_capacity": global_marking[place],
-                                "next_activity": next_activity,
-                                "next_timestamp": next_timestamp
+                                "next_place_timestamp": next_place_timestamp
                             })
     
     return place_max_capacities, capacity_composition
