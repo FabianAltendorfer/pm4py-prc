@@ -453,7 +453,7 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
-        self.place_max_capacities = None  # Neu hinzugefügt
+        self.place_max_capacities = None  # Attribut für place_max_capacities
         self.debug_data = None
         self.place_activity_data = None
         self.s_components = s_components
@@ -463,8 +463,8 @@ class ApplyTraceTokenReplay:
         self.global_place_capacities = global_place_capacities
         self.timestamp_key = timestamp_key
 
-    def run(self):
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.debug_data, self.place_activity_data = \
+        def run(self):
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data, self.place_activity_data = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
@@ -516,7 +516,7 @@ def transcribe_result(t, return_object_names=True):
         "consumed_tokens": int(t.consumed),
         "remaining_tokens": int(t.remaining),
         "produced_tokens": int(t.produced),
-        "place_max_capacities": copy(t.place_max_capacities),  # Neu hinzugefügt
+        "place_max_capacities": copy(t.place_max_capacities),  # Muss enthalten sein
         "debug_data": copy(t.debug_data),
         "place_activity_data": copy(t.place_activity_data)
     }
