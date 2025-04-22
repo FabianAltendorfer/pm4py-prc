@@ -602,7 +602,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
                  transition_fitness, notexisting_activities_in_model, places_shortest_path_by_hidden,
-                 consider_remaining_in_fitness, activity_key="concept:name", try_to_reach_final_marking_through_hidden=True,
+                 consider_remaining_in_fitness, activity_key="concept:name", reach_mark_through_hidden=True,
                  stop_immediately_unfit=False, walk_through_hidden_trans=True, post_fix_caching=None,
                  marking_to_activity_caching=None, is_reduction=False,
                  thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value,
@@ -626,7 +626,7 @@ class ApplyTraceTokenReplay:
         self.consider_remaining_in_fitness = consider_remaining_in_fitness
         self.consider_activities_not_in_model_in_fitness = consider_activities_not_in_model_in_fitness
         self.activity_key = activity_key
-        self.try_to_reach_final_marking_through_hidden = try_to_reach_final_marking_through_hidden
+        self.reach_mark_through_hidden = reach_mark_through_hidden  # Korrigiert
         self.stop_immediately_unfit = stop_immediately_unfit
         self.walk_through_hidden_trans = walk_through_hidden_trans
         self.post_fix_caching = post_fix_caching
@@ -669,7 +669,7 @@ class ApplyTraceTokenReplay:
                         self.notexisting_activities_in_model,
                         self.places_shortest_path_by_hidden, self.consider_remaining_in_fitness,
                         activity_key=self.activity_key,
-                        try_to_reach_final_marking_through_hidden=self.try_to_reach_final_marking_through_hidden,
+                        try_to_reach_final_marking_through_hidden=self.reach_mark_through_hidden,  # Korrigiert
                         stop_immediately_unfit=self.stop_immediately_unfit,
                         walk_through_hidden_trans=self.walk_through_hidden_trans,
                         post_fix_caching=self.post_fix_caching,
