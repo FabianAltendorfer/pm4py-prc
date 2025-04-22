@@ -35,7 +35,6 @@ class Parameters(Enum):
     ENABLE_PLTR_FITNESS = "enable_pltr_fitness"
     SHOW_PROGRESS_BAR = "show_progress_bar"
 
-
 class TechnicalParameters(Enum):
     MAX_REC_DEPTH = 50
     MAX_IT_FINAL1 = 5
@@ -47,29 +46,16 @@ class TechnicalParameters(Enum):
     ENABLE_POSTFIX_CACHE = False
     ENABLE_MARKTOACT_CACHE = False
 
-
 class DebugConst:
     REACH_MRH = -1
     REACH_ITF1 = -1
     REACH_ITF2 = -1
 
-
 class NoConceptNameException(Exception):
     def __init__(self, message):
         self.message = message
 
-
 def add_missing_tokens(t, marking):
-    """
-    Adds missing tokens needed to activate a transition
-
-    Parameters
-    ----------
-    t
-        Transition that should be enabled
-    marking
-        Current marking
-    """
     missing = 0
     tokens_added = {}
     for a in t.in_arcs:
@@ -79,16 +65,7 @@ def add_missing_tokens(t, marking):
             marking[a.source] = marking[a.source] + a.weight
     return [missing, tokens_added]
 
-
 def get_consumed_tokens(t):
-    """
-    Get tokens consumed firing a transition
-
-    Parameters
-    ----------
-    t
-        Transition that should be enabled
-    """
     consumed = 0
     consumed_map = {}
     for a in t.in_arcs:
@@ -96,16 +73,7 @@ def get_consumed_tokens(t):
         consumed_map[a.source] = a.weight
     return consumed, consumed_map
 
-
 def get_produced_tokens(t):
-    """
-    Get tokens produced firing a transition
-
-    Parameters
-    ----------
-    t
-        Transition that should be enabled
-    """
     produced = 0
     produced_map = {}
     for a in t.out_arcs:
@@ -113,18 +81,7 @@ def get_produced_tokens(t):
         produced_map[a.target] = a.weight
     return produced, produced_map
 
-
 def merge_dicts(x, y):
-    """
-    Merge two dictionaries keeping the least value
-
-    Parameters
-    ----------
-    x
-        First map (string, integer)
-    y
-        Second map (string, integer)
-    """
     for key in y:
         if key not in x:
             x[key] = y[key]
@@ -132,40 +89,15 @@ def merge_dicts(x, y):
             if y[key] < x[key]:
                 x[key] = y[key]
 
-
 def get_places_with_missing_tokens(t, marking):
-    """
-    Get places with missing tokens
-
-    Parameters
-    ----------
-    t
-        Transition to enable
-    marking
-        Current marking
-    """
     places_with_missing = set()
     for a in t.in_arcs:
         if marking[a.source] < a.weight:
             places_with_missing.add(a.source)
     return places_with_missing
 
-
 def get_hidden_transitions_to_enable(marking, places_with_missing, places_shortest_path_by_hidden):
-    """
-    Calculate an ordered list of transitions to visit in order to enable a given transition
-
-    Parameters
-    ----------
-    marking
-        Current marking
-    places_with_missing
-        List of places with missing tokens
-    places_shortest_path_by_hidden
-        Minimal connection between places by hidden transitions
-    """
     hidden_transitions_to_enable = []
-
     marking_places = [x for x in marking]
     marking_places = sorted(marking_places, key=lambda x: x.name)
     places_with_missing_keys = [x for x in places_with_missing]
@@ -175,25 +107,10 @@ def get_hidden_transitions_to_enable(marking, places_with_missing, places_shorte
             if p1 in places_shortest_path_by_hidden and p2 in places_shortest_path_by_hidden[p1]:
                 hidden_transitions_to_enable.append(places_shortest_path_by_hidden[p1][p2])
     hidden_transitions_to_enable = sorted(hidden_transitions_to_enable, key=lambda x: len(x))
-
     return hidden_transitions_to_enable
 
-
 def get_req_transitions_for_final_marking(marking, final_marking, places_shortest_path_by_hidden):
-    """
-    Gets required transitions for final marking
-
-    Parameters
-    ----------
-    marking
-        Current marking
-    final_marking
-        Final marking assigned to the Petri net
-    places_shortest_path_by_hidden
-        Minimal connection between places by hidden transitions
-    """
     hidden_transitions_to_enable = []
-
     marking_places = [x for x in marking]
     marking_places = sorted(marking_places, key=lambda x: x.name)
     final_marking_places = [x for x in final_marking]
@@ -203,32 +120,10 @@ def get_req_transitions_for_final_marking(marking, final_marking, places_shortes
             if p1 in places_shortest_path_by_hidden and p2 in places_shortest_path_by_hidden[p1]:
                 hidden_transitions_to_enable.append(places_shortest_path_by_hidden[p1][p2])
     hidden_transitions_to_enable = sorted(hidden_transitions_to_enable, key=lambda x: len(x))
-
     return hidden_transitions_to_enable
-
 
 def enable_hidden_transitions(net, marking, activated_transitions, visited_transitions, all_visited_markings,
                               hidden_transitions_to_enable, t):
-    """
-    Actually enable hidden transitions on the Petri net
-
-    Parameters
-    -----------
-    net
-        Petri net
-    marking
-        Current marking
-    activated_transitions
-        All activated transitions during the replay
-    visited_transitions
-        All visited transitions by the recursion
-    all_visited_markings
-        All visited markings
-    hidden_transitions_to_enable
-        List of hidden transition to enable
-    t
-        Transition against we should check if they are enabled
-    """
     j_indexes = [0] * len(hidden_transitions_to_enable)
     for z in range(10000000):
         something_changed = False
@@ -253,42 +148,15 @@ def enable_hidden_transitions(net, marking, activated_transitions, visited_trans
             break
     return [marking, activated_transitions, visited_transitions, all_visited_markings]
 
-
 def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr, rec_depth,
-                       visit_trans,
-                       vis_mark):
-    """
-    Apply hidden transitions in order to enable a given transition
-
-    Parameters
-    ----------
-    t
-        Transition to eventually enable
-    net
-        Petri net
-    marking
-        Marking
-    places_shortest_paths_by_hidden
-        Shortest paths between places connected by hidden transitions
-    act_tr
-        All activated transitions
-    rec_depth
-        Current recursion depth
-    visit_trans
-        All visited transitions by hiddenTrans method
-    vis_mark
-        All visited markings
-    """
+                       visit_trans, vis_mark):
     if rec_depth >= TechnicalParameters.MAX_REC_DEPTH_HIDTRANSENABL.value or t in visit_trans:
         return [net, marking, act_tr, vis_mark]
-    # if rec_depth > DebugConst.REACH_MRH:
-    #    DebugConst.REACH_MRH = rec_depth
     visit_trans.add(t)
     marking_at_start = copy(marking)
     places_with_missing = get_places_with_missing_tokens(t, marking)
     hidden_transitions_to_enable = get_hidden_transitions_to_enable(marking, places_with_missing,
                                                                     places_shortest_paths_by_hidden)
-
     if hidden_transitions_to_enable:
         [marking, act_tr, visit_trans, vis_mark] = enable_hidden_transitions(net,
                                                                              marking,
@@ -327,59 +195,55 @@ def apply_hidden_trans(t, net, marking, places_shortest_paths_by_hidden, act_tr,
                                                                       rec_depth + 1,
                                                                       visit_trans,
                                                                       vis_mark)
-
     return [net, marking, act_tr, vis_mark]
 
-
 def break_condition_final_marking(marking, final_marking):
-    """
-    Verify break condition for final marking
-
-    Parameters
-    -----------
-    marking
-        Current marking
-    final_marking
-        Target final marking
-    """
     final_marking_dict = dict(final_marking)
     marking_dict = dict(marking)
     final_marking_dict_keys = set(final_marking_dict.keys())
     marking_dict_keys = set(marking_dict.keys())
-
     return final_marking_dict_keys.issubset(marking_dict_keys)
 
 def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_key="time:timestamp"):
-    """
-    Find events with the same timestamp as the given event, where the subsequent event
-    (if any) has a later timestamp or does not exist.
-    
-    Parameters
-    ----------
-    event : dict
-        The current event being processed.
-    events_by_timestamp : dict
-        Dictionary mapping timestamps to lists of (case_id, event_index, event, next_timestamp) tuples.
-    activity_key : str
-        Key for activity name.
-    timestamp_key : str
-        Key for timestamp.
-    
-    Returns
-    -------
-    list
-        List of events with overlapping timestamps and unprocessed subsequent events.
-    """
     current_timestamp = event[timestamp_key]
     if current_timestamp not in events_by_timestamp:
         return []
-    
     overlapping = []
     for case_id, event_idx, evt, next_ts in events_by_timestamp[current_timestamp]:
         if next_ts is None or next_ts > current_timestamp:
             overlapping.append(evt)
-    
     return overlapping
+
+def compute_global_place_capacities(log, net, initial_marking, trans_map, timestamp_key="time:timestamp", activity_key="concept:name"):
+    all_events = []
+    if pandas_utils.check_is_pandas_dataframe(log):
+        for case_id, group in log.groupby(case_id_key):
+            sorted_group = group.sort_values(timestamp_key)
+            for idx, row in sorted_group.iterrows():
+                event = row.to_dict()
+                all_events.append((event[timestamp_key], case_id, event))
+    else:
+        for trace in log:
+            case_id = trace.attributes[case_id_key]
+            sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
+            for event in sorted_trace:
+                all_events.append((event[timestamp_key], case_id, event))
+    
+    all_events.sort(key=lambda x: x[0])
+    
+    global_marking = copy(initial_marking)
+    place_max_capacities = {place: global_marking.get(place, 0) for place in net.places}
+    
+    for ts, case_id, event in all_events:
+        if event[activity_key] in trans_map:
+            t = trans_map[event[activity_key]]
+            if semantics.is_enabled(t, net, global_marking):
+                global_marking = semantics.execute(t, net, global_marking)
+                for place in global_marking:
+                    if global_marking[place] > place_max_capacities[place]:
+                        place_max_capacities[place] = global_marking[place]
+    
+    return place_max_capacities
 
 def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
                 transition_fitness, notexisting_activities_in_model,
@@ -391,9 +255,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                 cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                 consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
                 global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
-    """
-    Modified apply_trace to update global place capacities based on overlapping timestamps.
-    """
     sorted_events = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
 
     act_trans = []
@@ -414,9 +275,8 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         place_capacities[place]['current'] = tokens
         place_capacities[place]['max'] = tokens
 
-    # Debugging-Informationen sammeln
     debug_data = []
-    place_activity_data = []  # Neu: Für Cases, die den Zielplatz passieren
+    place_activity_data = []
 
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
@@ -424,58 +284,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
             t = trans_map[event[activity_key]]
             current_event_map.update(event)
 
-            # Get overlapping events
-            overlapping_events = get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_key)
-            
-            # Update global place counts for this timestamp
-            current_timestamp = event[timestamp_key]
-            if current_timestamp not in global_place_counts:
-                global_place_counts[current_timestamp] = {place: 0 for place in net.places}
-            
-            temp_marking = copy(initial_marking)
-            for overlap_event in overlapping_events:
-                if overlap_event[activity_key] in trans_map:
-                    overlap_t = trans_map[overlap_event[activity_key]]
-                    if semantics.is_enabled(overlap_t, net, temp_marking):
-                        c, cmap = get_consumed_tokens(overlap_t)
-                        p, pmap = get_produced_tokens(overlap_t)
-                        temp_marking = semantics.execute(overlap_t, net, temp_marking)
-                        for place in cmap:
-                            global_place_counts[current_timestamp][place] -= cmap[place]
-                        for place in pmap:
-                            global_place_counts[current_timestamp][place] += pmap[place]
-
-            # Debugging für einen spezifischen Platz
-            target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"  # Ersetze mit deinem Platz
-            for place in net.places:
-                if place.name == target_place_name:
-                    if place not in global_place_capacities:
-                        global_place_capacities[place] = {'max': 0}
-                    if global_place_counts[current_timestamp][place] > global_place_capacities[place]['max']:
-                        global_place_capacities[place]['max'] = global_place_counts[current_timestamp][place]
-                        # Sammle Debugging-Informationen
-                        case_info = []
-                        for evt in overlapping_events:
-                            if evt[activity_key] in trans_map:
-                                case_id = evt["case:concept:name"]
-                                # Finde das nächste Event für diesen Case
-                                next_activity = "None"
-                                evt_timestamp = evt[timestamp_key]
-                                for _, evt_idx, next_evt, next_ts in events_by_timestamp.get(evt_timestamp, []):
-                                    if next_ts and next_ts > evt_timestamp and next_evt["case:concept:name"] == case_id:
-                                        next_activity = next_evt[activity_key]
-                                        break
-                                case_info.append({"case_id": case_id, "next_activity": next_activity})
-                        debug_data.append({
-                            "place": place.name,
-                            "timestamp": current_timestamp,
-                            "max_capacity": global_place_counts[current_timestamp][place],
-                            "contributing_cases": [info["case_id"] for info in case_info],
-                            "next_activities": [info["next_activity"] for info in case_info]
-                        })
-
-            # Sammle Daten für alle Cases, die den Zielplatz passieren
-            target_transition = "E5GAG45_H5GGML56"  # Eingehende Transition des Platzes
+            target_transition = "E5GAG45_H5GGML56"
             if event[activity_key] == target_transition:
                 case_id = event["case:concept:name"]
                 next_activity = "None"
@@ -488,7 +297,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                     "next_activity": next_activity
                 })
 
-            # [Rest der bestehenden Logik unverändert]
             if not semantics.is_enabled(t, net, marking):
                 if stop_immediately_unfit:
                     missing += 1
@@ -544,9 +352,8 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         if i > 0:
             activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), sorted_events[i-1][activity_key]])
         else:
-            activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), ""])
+            activating_transition_interval.append([event[activity_key], prev_len_－－ーノactivated_transitions, len(act_trans), ""])
 
-    # [Restlicher Code unverändert]
     marking_before_cleaning = copy(marking)
     diff_fin_mark_mark = Marking()
     for p in final_marking:
@@ -597,7 +404,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
             semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities, debug_data, place_activity_data]  # Füge place_activity_data hinzu
+            place_max_capacities, debug_data, place_activity_data]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
@@ -609,9 +416,6 @@ class ApplyTraceTokenReplay:
                  cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                  consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
                  global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
-        """
-        Constructor
-        """
         self.thread_is_alive = True
         self.trace = trace
         self.net = net
@@ -626,7 +430,7 @@ class ApplyTraceTokenReplay:
         self.consider_remaining_in_fitness = consider_remaining_in_fitness
         self.consider_activities_not_in_model_in_fitness = consider_activities_not_in_model_in_fitness
         self.activity_key = activity_key
-        self.reach_mark_through_hidden = reach_mark_through_hidden  # Korrigiert
+        self.reach_mark_through_hidden = reach_mark_through_hidden
         self.stop_immediately_unfit = stop_immediately_unfit
         self.walk_through_hidden_trans = walk_through_hidden_trans
         self.post_fix_caching = post_fix_caching
@@ -649,7 +453,6 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
-        self.place_max_capacities = None
         self.debug_data = None
         self.place_activity_data = None
         self.s_components = s_components
@@ -660,16 +463,13 @@ class ApplyTraceTokenReplay:
         self.timestamp_key = timestamp_key
 
     def run(self):
-        """
-        Runs the thread and stores the results
-        """
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data, self.place_activity_data = \
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.debug_data, self.place_activity_data = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
                         self.places_shortest_path_by_hidden, self.consider_remaining_in_fitness,
                         activity_key=self.activity_key,
-                        try_to_reach_final_marking_through_hidden=self.reach_mark_through_hidden,  # Korrigiert
+                        try_to_reach_final_marking_through_hidden=self.reach_mark_through_hidden,
                         stop_immediately_unfit=self.stop_immediately_unfit,
                         walk_through_hidden_trans=self.walk_through_hidden_trans,
                         post_fix_caching=self.post_fix_caching,
@@ -688,51 +488,20 @@ class ApplyTraceTokenReplay:
                         timestamp_key=self.timestamp_key)
         self.thread_is_alive = False
 
-
 class PostFixCaching:
-    """
-    Post fix caching object
-    """
-
     def __init__(self):
-        self.cache = 0
         self.cache = {}
-
 
 class MarkingToActivityCaching:
-    """
-    Marking to activity caching
-    """
-
     def __init__(self):
-        self.cache = 0
         self.cache = {}
 
-
 def get_variant_from_trace(trace, activity_key, disable_variants=False):
-    """
-    Gets the variant from the trace (allow disabling)
-
-    Parameters
-    ------------
-    trace
-        Trace
-    activity_key
-        Attribute that is the activity
-    disable_variants
-        Boolean value that disable variants
-
-    Returns
-    -------------
-    variant
-        Variant describing the trace
-    """
     if disable_variants:
         return str(hash(trace))
     parameters = {}
     parameters[variants_util.Parameters.ACTIVITY_KEY] = activity_key
     return variants_util.get_variant_from_trace(trace, parameters=parameters)
-
 
 def transcribe_result(t, return_object_names=True):
     corr_value = {
@@ -746,9 +515,8 @@ def transcribe_result(t, return_object_names=True):
         "consumed_tokens": int(t.consumed),
         "remaining_tokens": int(t.remaining),
         "produced_tokens": int(t.produced),
-        "place_max_capacities": copy(t.place_max_capacities),
         "debug_data": copy(t.debug_data),
-        "place_activity_data": copy(t.place_activity_data)  # Neu hinzugefügt
+        "place_activity_data": copy(t.place_activity_data)
     }
 
     if return_object_names:
@@ -760,7 +528,6 @@ def transcribe_result(t, return_object_names=True):
         corr_value["reached_marking"] = {x.name: y for x, y in corr_value["reached_marking"].items()}
 
     return corr_value
-
 
 def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=False, consider_remaining_in_fitness=False,
               activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False,
@@ -795,7 +562,10 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
 
-    # Precompute events by timestamp
+    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, timestamp_key, activity_key)
+    all_debug_data = []
+    all_place_activity_data = []
+
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
@@ -822,13 +592,6 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                     events_by_timestamp[ts] = []
                 events_by_timestamp[ts].append((trace.attributes[case_id_key], j, event, next_ts))
 
-    # Initialize global place counts, capacities, and debug data
-    global_place_counts = {}
-    global_place_capacities = {}
-    all_debug_data = []
-    all_place_activity_data = []
-
-    # Process each trace individually
     threads_results = {}
     progress = None
     if importlib.util.find_spec("tqdm") and show_progress_bar and len(log) > 1:
@@ -852,7 +615,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                   is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
                                   cleaning_token_flood=cleaning_token_flood, s_components=s_components,
                                   trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
-                                  events_by_timestamp=events_by_timestamp, global_place_counts=global_place_counts,
+                                  events_by_timestamp=events_by_timestamp, global_place_counts={},
                                   global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
         t.run()
         threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
@@ -864,37 +627,32 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
 
-    # Speichere Debugging-Informationen als CSV
     if all_debug_data:
         debug_df = pd.DataFrame(all_debug_data)
         debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
         print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
 
-    # Speichere place_activity_data als CSV
     if all_place_activity_data:
         place_activity_df = pd.DataFrame(all_place_activity_data)
         place_activity_df.to_csv("../Ergebnisse_PRC/place_activity_log.csv", index=False)
         print(f"Place activity log saved to '../Ergebnisse_PRC/place_activity_log.csv'")
 
-    # Erstelle CSV mit der letzten Aktivität der contributing_cases
     if all_debug_data:
         contributing_cases = set()
         for debug_entry in all_debug_data:
             for case_id in debug_entry["contributing_cases"]:
                 contributing_cases.add(case_id)
         last_activity_data = []
-        event_sequence_data = []  # Neu: Für die Event-Sequenzen der contributing_cases
+        event_sequence_data = []
         if pandas_utils.check_is_pandas_dataframe(log):
             for case_id, group in log.groupby(case_id_key):
                 if case_id in contributing_cases:
-                    # Letzte Aktivität
                     last_event = group.sort_values(timestamp_key).iloc[-1]
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
-                    # Event-Sequenz
                     sorted_group = group.sort_values(timestamp_key)
                     for idx, row in sorted_group.iterrows():
                         event = row.to_dict()
@@ -912,14 +670,12 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
             for trace in log:
                 case_id = trace.attributes[case_id_key]
                 if case_id in contributing_cases:
-                    # Letzte Aktivität
                     last_event = max(trace, key=lambda x: x.get(timestamp_key, 0))
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
-                    # Event-Sequenz
                     sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
                     for j, event in enumerate(sorted_trace):
                         next_activity = "None"
@@ -943,40 +699,23 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     if progress:
         progress.close()
 
-    # Update aligned_traces with global place capacities
     for i in range(len(aligned_traces)):
-        aligned_traces[i]["place_max_capacities"] = {place.name: capacities['max'] for place, capacities in global_place_capacities.items()}
+        if return_object_names:
+            aligned_traces[i]["place_max_capacities"] = {place.name: global_place_capacities[place] for place in net.places}
+        else:
+            aligned_traces[i]["place_max_capacities"] = global_place_capacities
 
     if enable_pltr_fitness:
         return aligned_traces, place_fitness_per_trace, transition_fitness_per_trace, notexisting_activities_in_model
     else:
         return aligned_traces
 
-
 def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[Union[str, Parameters], Any]] = None) -> typing.ListAlignments:
-    """
-    Method to apply token-based replay
-
-    Parameters
-    -----------
-    log
-        Log
-    net
-        Petri net
-    initial_marking
-        Initial marking
-    final_marking
-        Final marking
-    parameters
-        Parameters of the algorithm
-    """
     if parameters is None:
         parameters = {}
 
     enable_pltr_fitness = exec_utils.get_param_value(Parameters.ENABLE_PLTR_FITNESS, parameters, False)
-    # changed default to uniform behavior with token-based replay fitness
-    consider_remaining_in_fitness = exec_utils.get_param_value(Parameters.CONSIDER_REMAINING_IN_FITNESS, parameters,
-                                                               True)
+    consider_remaining_in_fitness = exec_utils.get_param_value(Parameters.CONSIDER_REMAINING_IN_FITNESS, parameters, True)
     try_to_reach_final_marking_through_hidden = exec_utils.get_param_value(
         Parameters.TRY_TO_REACH_FINAL_MARKING_THROUGH_HIDDEN, parameters, True)
     stop_immediately_unfit = exec_utils.get_param_value(Parameters.STOP_IMMEDIATELY_UNFIT, parameters, False)
@@ -1009,7 +748,6 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
                      return_object_names=return_names, show_progress_bar=show_progress_bar,
                      consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
                      case_id_key=case_id_key)
-
 
 def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: typing.ListAlignments, parameters: Optional[Dict[Union[str, Parameters], Any]] = None) -> pd.DataFrame:
     if parameters is None:
