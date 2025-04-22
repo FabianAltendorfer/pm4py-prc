@@ -886,7 +886,8 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         contributing_cases = set()
         for debug_entry in all_debug_data:
             for case_id in debug_entry["contributing_cases"]:
-                contributing_cases.add(case_id)
+                if case_id not in contributing_cases:
+                    contributing_cases.add(case_id)
         last_activity_data = []
         event_sequence_data = []
         if pandas_utils.check_is_pandas_dataframe(log):
