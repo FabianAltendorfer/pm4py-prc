@@ -453,6 +453,7 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
+        self.place_max_capacities = None  # Neu hinzugefügt
         self.debug_data = None
         self.place_activity_data = None
         self.s_components = s_components
@@ -515,6 +516,7 @@ def transcribe_result(t, return_object_names=True):
         "consumed_tokens": int(t.consumed),
         "remaining_tokens": int(t.remaining),
         "produced_tokens": int(t.produced),
+        "place_max_capacities": copy(t.place_max_capacities),  # Neu hinzugefügt
         "debug_data": copy(t.debug_data),
         "place_activity_data": copy(t.place_activity_data)
     }
