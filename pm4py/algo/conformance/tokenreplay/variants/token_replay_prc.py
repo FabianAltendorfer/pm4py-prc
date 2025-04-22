@@ -416,7 +416,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
 
     # Debugging-Informationen sammeln
     debug_data = []
-    place_activity_data = []  # Neu: Für Cases, die den Zielplatz passieren
+    place_activity_data = []
 
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
@@ -446,7 +446,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                             global_place_counts[current_timestamp][place] += pmap[place]
 
             # Debugging für einen spezifischen Platz
-            target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"  # Ersetze mit deinem Platz
+            target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"
             for place in net.places:
                 if place.name == target_place_name:
                     if place not in global_place_capacities:
@@ -458,12 +458,14 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                         for evt in overlapping_events:
                             if evt[activity_key] in trans_map:
                                 case_id = evt["case:concept:name"]
-                                # Finde das nächste Event für diesen Case
+                                # Finde das nächste Event für diesen Case im Trace
                                 next_activity = "None"
                                 evt_timestamp = evt[timestamp_key]
-                                for _, evt_idx, next_evt, next_ts in events_by_timestamp.get(evt_timestamp, []):
-                                    if next_ts and next_ts > evt_timestamp and next_evt["case:concept:name"] == case_id:
-                                        next_activity = next_evt[activity_key]
+                                # Suche das aktuelle Event in sorted_events
+                                for j, trace_event in enumerate(sorted_events):
+                                    if trace_event[timestamp_key] == evt_timestamp and trace_event[activity_key] == evt[activity_key] and trace_event["case:concept:name"] == case_id:
+                                        if j + 1 < len(sorted_events):
+                                            next_activity = sorted_events[j + 1][activity_key]
                                         break
                                 case_info.append({"case_id": case_id, "next_activity": next_activity})
                         debug_data.append({
@@ -475,7 +477,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                         })
 
             # Sammle Daten für alle Cases, die den Zielplatz passieren
-            target_transition = "E5GAG45_H5GGML56"  # Eingehende Transition des Platzes
+            target_transition = "E5GAG45_H5GGML56"
             if event[activity_key] == target_transition:
                 case_id = event["case:concept:name"]
                 next_activity = "None"
@@ -597,7 +599,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
             semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities, debug_data, place_activity_data]  # Füge place_activity_data hinzu
+            place_max_capacities, debug_data, place_activity_data]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
