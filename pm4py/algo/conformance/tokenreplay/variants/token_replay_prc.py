@@ -767,7 +767,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               walk_through_hidden_trans=True, places_shortest_path_by_hidden=None,
               is_reduction=False, thread_maximum_ex_time=10,
               cleaning_token_flood=False, disable_variants=False, return_object_names=False, show_progress_bar=True,
-              consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME):
+              consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, timestamp_key='time:timestamp'):
     import pandas as pd
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
