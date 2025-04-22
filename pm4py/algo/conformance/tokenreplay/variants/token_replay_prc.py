@@ -216,9 +216,12 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
 
 def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
+    # Dictionary zur Speicherung der Events pro Case für die Ermittlung der Folgeaktivität
+    events_by_case = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
             sorted_group = group.sort_values(timestamp_key)
+            events_by_case[case_id] = [(row[timestamp_key], row.to_dict()) for idx, row in sorted_group.iterrows()]
             for idx, row in sorted_group.iterrows():
                 event = row.to_dict()
                 all_events.append((event[timestamp_key], case_id, event))
@@ -226,6 +229,7 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
         for trace in log:
             case_id = trace.attributes[case_id_key]
             sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
+            events_by_case[case_id] = [(event[timestamp_key], event) for event in sorted_trace]
             for event in sorted_trace:
                 all_events.append((event[timestamp_key], case_id, event))
     
@@ -234,7 +238,7 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
     global_marking = copy(initial_marking)
     place_max_capacities = {place: global_marking.get(place, 0) for place in net.places}
     
-    # Neue Liste für Debugging-Informationen zur Kapazitätszusammensetzung
+    # Liste für Debugging-Informationen zur Kapazitätszusammensetzung
     capacity_composition = []
     target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"
     
@@ -249,17 +253,27 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
                         place_max_capacities[place] = global_marking[place]
                         # Für den Zielplatz zusätzliche Informationen speichern
                         if place.name == target_place_name:
-                            # Ermittle eingehende Transitionen, die Token produziert haben
-                            produced_tokens = get_produced_tokens(t)[1]
-                            if place in produced_tokens:
-                                capacity_composition.append({
-                                    "place": place.name,
-                                    "timestamp": ts,
-                                    "case_id": case_id,
-                                    "transition": t.label,
-                                    "tokens_added": produced_tokens[place],
-                                    "new_max_capacity": global_marking[place]
-                                })
+                            # Ermittle die nächste Aktivität und deren Zeitstempel
+                            next_activity = "None"
+                            next_timestamp = None
+                            case_events = events_by_case[case_id]
+                            for i, (evt_ts, evt) in enumerate(case_events):
+                                if evt_ts == ts and evt[activity_key] == event[activity_key]:
+                                    if i + 1 < len(case_events):
+                                        next_activity = case_events[i + 1][1][activity_key]
+                                        next_timestamp = case_events[i + 1][0]
+                                    break
+                            # Speichere Informationen
+                            capacity_composition.append({
+                                "place": place.name,
+                                "timestamp": ts,
+                                "case_id": case_id,
+                                "transition": t.label,
+                                "tokens_added": get_produced_tokens(t)[1].get(place, 0),
+                                "new_max_capacity": global_marking[place],
+                                "next_activity": next_activity,
+                                "next_timestamp": next_timestamp
+                            })
     
     return place_max_capacities, capacity_composition
 
