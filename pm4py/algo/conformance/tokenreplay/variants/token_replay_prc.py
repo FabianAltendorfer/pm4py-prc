@@ -775,7 +775,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               walk_through_hidden_trans=True, places_shortest_path_by_hidden=None,
               is_reduction=False, thread_maximum_ex_time=10,
               cleaning_token_flood=False, disable_variants=False, return_object_names=False, show_progress_bar=True,
-              consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
+              consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME,
               timestamp_key="time:timestamp"):
     import pandas as pd
     post_fix_cache = PostFixCaching()
@@ -807,20 +807,20 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
-            sorted_group = group.sort_values(timestamp_key)
+            sorted_group = group.sort_values([timestamp_key, activity_key])  # Deterministische Sortierung
             for idx, row in sorted_group.iterrows():
                 event = row.to_dict()
                 ts = event[timestamp_key]
                 next_ts = None
                 if idx + 1 < len(sorted_group):
-                    next_row = sorted_group.iloc[sorted_group.index.get_loc(idx) + 1]
+                    next_row = sorted_group.iloc[idx + 1]
                     next_ts = next_row[timestamp_key]
                 if ts not in events_by_timestamp:
                     events_by_timestamp[ts] = []
                 events_by_timestamp[ts].append((case_id, idx, event, next_ts))
     else:
         for i, trace in enumerate(log):
-            sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
+            sorted_trace = sorted(trace, key=lambda x: (x.get(timestamp_key, 0), x[activity_key]))  # Deterministische Sortierung
             for j, event in enumerate(sorted_trace):
                 ts = event[timestamp_key]
                 next_ts = None
@@ -830,7 +830,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                     events_by_timestamp[ts] = []
                 events_by_timestamp[ts].append((trace.attributes[case_id_key], j, event, next_ts))
 
-    # Initialize global place counts, capacities, and debug data
+    # Initialize global place counts and capacities
     global_place_counts = {}
     global_place_capacities = {}
     all_debug_data = []
@@ -849,32 +849,63 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         traces = [(trace.attributes[case_id_key], [event[activity_key] for event in trace], trace) for trace in log]
 
     for i, (case_id, activities, trace_data) in enumerate(traces):
-        t = ApplyTraceTokenReplay(trace_data, net, initial_marking, final_marking,
-                                  trans_map, enable_pltr_fitness, place_fitness_per_trace,
-                                  transition_fitness_per_trace, notexisting_activities_in_model,
-                                  places_shortest_path_by_hidden, consider_remaining_in_fitness,
-                                  activity_key=activity_key, reach_mark_through_hidden=reach_mark_through_hidden,
-                                  stop_immediately_unfit=stop_immediately_unfit,
-                                  walk_through_hidden_trans=walk_through_hidden_trans,
-                                  post_fix_caching=post_fix_cache, marking_to_activity_caching=marking_to_activity_cache,
-                                  is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
-                                  cleaning_token_flood=cleaning_token_flood, s_components=s_components,
-                                  trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
-                                  events_by_timestamp=events_by_timestamp, global_place_counts=global_place_counts,
-                                  global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
-        t.run()
-        threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
-        all_debug_data.extend(threads_results[i]["debug_data"])
-        all_place_activity_data.extend(threads_results[i]["place_activity_data"])
-        if progress:
-            progress.update()
+        print(f"Processing trace {i + 1}/{len(traces)}, case_id: {case_id}")
+        try:
+            t = ApplyTraceTokenReplay(trace_data, net, initial_marking, final_marking,
+                                      trans_map, enable_pltr_fitness, place_fitness_per_trace,
+                                      transition_fitness_per_trace, notexisting_activities_in_model,
+                                      places_shortest_path_by_hidden, consider_remaining_in_fitness,
+                                      activity_key=activity_key, reach_mark_through_hidden=reach_mark_through_hidden,
+                                      stop_immediately_unfit=stop_immediately_unfit,
+                                      walk_through_hidden_trans=walk_through_hidden_trans,
+                                      post_fix_caching=post_fix_cache, marking_to_activity_caching=marking_to_activity_cache,
+                                      is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
+                                      cleaning_token_flood=cleaning_token_flood, s_components=s_components,
+                                      trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
+                                      events_by_timestamp=events_by_timestamp, global_place_counts=global_place_counts,
+                                      global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
+            t.run()
+            threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
+            all_debug_data.extend(threads_results[i]["debug_data"])
+            all_place_activity_data.extend(threads_results[i]["place_activity_data"])
+            if progress:
+                progress.update()
+        except Exception as e:
+            print(f"Error processing trace {i + 1}, case_id: {case_id}, error: {str(e)}")
+            raise
 
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
 
     # Speichere Debugging-Informationen als CSV
     if all_debug_data:
-        debug_df = pd.DataFrame(all_debug_data)
+        # Konsolidiere debug_data nach place, timestamp und max_capacity
+        consolidated_debug_data = {}
+        for entry in all_debug_data:
+            key = (entry["place"], entry["timestamp"], entry["max_capacity"])
+            if key not in consolidated_debug_data:
+                consolidated_debug_data[key] = {
+                    "place": entry["place"],
+                    "timestamp": entry["timestamp"],
+                    "max_capacity": entry["max_capacity"],
+                    "contributing_cases": set(),
+                    "next_activities": []
+                }
+            consolidated_debug_data[key]["contributing_cases"].update(entry["contributing_cases"])
+            consolidated_debug_data[key]["next_activities"].extend(entry["next_activities"])
+        
+        # Konvertiere in Liste für DataFrame
+        final_debug_data = []
+        for key, data in consolidated_debug_data.items():
+            final_debug_data.append({
+                "place": data["place"],
+                "timestamp": data["timestamp"],
+                "max_capacity": data["max_capacity"],
+                "contributing_cases": list(data["contributing_cases"]),
+                "next_activities": data["next_activities"]
+            })
+        
+        debug_df = pd.DataFrame(final_debug_data)
         debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
         print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
 
@@ -890,20 +921,29 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         for debug_entry in all_debug_data:
             for case_id in debug_entry["contributing_cases"]:
                 contributing_cases.add(case_id)
+        print(f"Contributing cases: {contributing_cases}")
+        log_case_ids = set(log[case_id_key].unique())
+        missing_cases = contributing_cases - log_case_ids
+        if missing_cases:
+            print(f"Missing case_ids in log: {missing_cases}")
+            missing_cases_data = [{"case_id": case_id, "status": "Not found in log"} for case_id in missing_cases]
+            missing_cases_df = pd.DataFrame(missing_cases_data)
+            missing_cases_df.to_csv("../Ergebnisse_PRC/missing_cases.csv", index=False)
+            print(f"Missing cases saved to '../Ergebnisse_PRC/missing_cases.csv'")
+        
         last_activity_data = []
         event_sequence_data = []
         if pandas_utils.check_is_pandas_dataframe(log):
             for case_id, group in log.groupby(case_id_key):
                 if case_id in contributing_cases:
-                    # Letzte Aktivität
-                    sorted_group = group.sort_values(timestamp_key)
+                    print(f"Processing case_id: {case_id}, rows: {len(group)}")
+                    sorted_group = group.sort_values([timestamp_key, activity_key])
                     last_event = sorted_group.iloc[-1]
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
-                    # Event-Sequenz
                     for j, row in enumerate(sorted_group.to_dict('records')):
                         event = row
                         next_activity = "None"
@@ -920,15 +960,13 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
             for trace in log:
                 case_id = trace.attributes[case_id_key]
                 if case_id in contributing_cases:
-                    # Letzte Aktivität
-                    sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
+                    sorted_trace = sorted(trace, key=lambda x: (x.get(timestamp_key, 0), x[activity_key]))
                     last_event = sorted_trace[-1]
                     last_activity_data.append({
                         "case_id": case_id,
                         "last_activity": last_event[activity_key],
                         "last_timestamp": last_event[timestamp_key]
                     })
-                    # Event-Sequenz
                     for j, event in enumerate(sorted_trace):
                         next_activity = "None"
                         if j + 1 < len(sorted_trace):
