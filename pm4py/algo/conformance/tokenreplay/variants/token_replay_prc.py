@@ -495,7 +495,7 @@ class ApplyTraceTokenReplay:
         self.global_place_capacities = global_place_capacities
         self.timestamp_key = timestamp_key
 
-        def run(self):
+    def run(self):
         self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data, self.place_activity_data = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
