@@ -352,7 +352,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         if i > 0:
             activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), sorted_events[i-1][activity_key]])
         else:
-            activating_transition_interval.append([event[activity_key], prev_len_－－ーノactivated_transitions, len(act_trans), ""])
+            activating_transition_interval.append([event[activity_key], prev_len_activated_transitions, len(act_trans), ""])
 
     marking_before_cleaning = copy(marking)
     diff_fin_mark_mark = Marking()
