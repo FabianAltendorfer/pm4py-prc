@@ -214,7 +214,7 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
             overlapping.append(evt)
     return overlapping
 
-def compute_global_place_capacities(log, net, initial_marking, trans_map, timestamp_key="time:timestamp", activity_key="concept:name"):
+def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
@@ -562,7 +562,8 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
 
-    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, timestamp_key, activity_key)
+    # Änderung hier: case_id_key als Parameter übergeben
+    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
     all_debug_data = []
     all_place_activity_data = []
 
