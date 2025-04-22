@@ -214,7 +214,7 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
             overlapping.append(evt)
     return overlapping
 
-ddef compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
+def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
     # Dictionary zur Speicherung der Events pro Case
     events_by_case = {}
