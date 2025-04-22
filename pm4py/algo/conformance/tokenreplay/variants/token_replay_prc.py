@@ -458,14 +458,17 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                         for evt in overlapping_events:
                             if evt[activity_key] in trans_map:
                                 case_id = evt["case:concept:name"]
-                                # Finde das nächste Event für diesen Case im Trace
                                 next_activity = "None"
                                 evt_timestamp = evt[timestamp_key]
-                                # Suche das aktuelle Event in sorted_events
+                                print(f"Processing event for case {case_id}, activity {evt[activity_key]}, timestamp {evt_timestamp}")
                                 for j, trace_event in enumerate(sorted_events):
-                                    if trace_event[timestamp_key] == evt_timestamp and trace_event[activity_key] == evt[activity_key] and trace_event["case:concept:name"] == case_id:
+                                    print(f"Trace event {j}: activity {trace_event[activity_key]}, timestamp {trace_event[timestamp_key]}, case {trace_event['case:concept:name']}")
+                                    if trace_event[activity_key] == evt[activity_key] and trace_event["case:concept:name"] == case_id:
                                         if j + 1 < len(sorted_events):
                                             next_activity = sorted_events[j + 1][activity_key]
+                                            print(f"Found match at index {j}, next_activity: {next_activity}")
+                                        else:
+                                            print(f"Found match at index {j}, but no next event")
                                         break
                                 case_info.append({"case_id": case_id, "next_activity": next_activity})
                         debug_data.append({
