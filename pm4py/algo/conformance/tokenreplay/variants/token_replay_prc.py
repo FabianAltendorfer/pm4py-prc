@@ -632,7 +632,6 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
         Parameters.TRY_TO_REACH_FINAL_MARKING_THROUGH_HIDDEN, parameters, True)
     stop_immediately_unfit = exec_utils.get_param_value(Parameters.STOP_IMMEDIATELY_UNFIT, parameters, False)
     walk_through_hidden_trans = exec_utils.get_param_value(Parameters.WALK_THROUGH_HIDDEN_TRANS, parameters, True)
-    is tiling
     is_reduction = exec_utils.get_param_value(Parameters.IS_REDUCTION, parameters, False)
     cleaning_token_flood = exec_utils.get_param_value(Parameters.CLEANING_TOKEN_FLOOD, parameters, False)
     disable_variants = exec_utils.get_param_value(Parameters.DISABLE_VARIANTS, parameters, enable_pltr_fitness)
