@@ -697,13 +697,13 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to '{output_ocel_path}'")
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
     
     Args:
         log: Input log (EventLog or DataFrame).
-        tbr_output: List of TBR alignment results.
+        tbr_output: List of TBR alignment results (dictionaries).
         parameters: Configuration parameters.
     
     Returns:
@@ -711,9 +711,9 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
     """
     if parameters is None:
         parameters = {}
-    case_id_key = exec_utils.get_param_value(pm4py_parameters.Parameters.CASE_ID_KEY, parameters, xes_util.DEFAULT_TRACEID_KEY)
-    ocel_path = exec_utils.get_param_value('ocel_path', parameters, None)
-    output_ocel_path = exec_utils.get_param_value('output_ocel_path', parameters, None)
+    case_id_key = parameters.get("case:concept:name", "case:concept:name")
+    ocel_path = parameters.get('ocel_path')
+    output_ocel_path = parameters.get('output_ocel_path')
     
     diagn_stream = []
     type_capacities = {}
