@@ -587,6 +587,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         traces = [(trace.attributes[case_id_key], [event[activity_key] for event in trace], trace) for trace in log]
 
     for i, (case_id, activities, trace_data) in enumerate(traces):
+    try:
         t = ApplyTraceTokenReplay(trace_data, net, initial_marking, final_marking,
                                   trans_map, enable_pltr_fitness, place_fitness_per_trace,
                                   transition_fitness_per_trace, notexisting_activities_in_model,
@@ -604,6 +605,9 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
         if progress:
             progress.update()
+    except Exception as e:
+        print(f"Error processing trace {i} (case_id: {case_id}, activities: {activities}): {str(e)}")
+        continue
 
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
