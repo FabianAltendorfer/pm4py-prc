@@ -16,6 +16,7 @@ from pm4py.util import typing
 from collections import Counter
 from pm4py.objects.conversion.log import converter as log_converter
 import os
+from xml.etree import ElementTree
 
 class Parameters(Enum):
     CASE_ID_KEY = constants.PARAMETER_CONSTANT_CASEID_KEY
