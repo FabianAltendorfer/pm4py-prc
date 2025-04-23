@@ -216,7 +216,6 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
 
 def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
-    # Dictionary zur Speicherung der Events pro Case
     events_by_case = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
@@ -238,45 +237,16 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
     global_marking = copy(initial_marking)
     place_max_capacities = {place: global_marking.get(place, 0) for place in net.places}
     
-    # Liste für Debugging-Informationen zur Kapazitätszusammensetzung
-    capacity_composition = []
-    target_place_name = "({'E5GAG45_H5GGML56'}, {'E5GAG45_H5GGML5F'})"
-    outgoing_transition = "E5GAG45_H5GGML5F"  # Angenommene ausgehende Transition basierend auf Platzname
-    
     for ts, case_id, event in all_events:
         if event[activity_key] in trans_map:
             t = trans_map[event[activity_key]]
             if semantics.is_enabled(t, net, global_marking):
                 global_marking = semantics.execute(t, net, global_marking)
-                # Überprüfen, ob Token in den Zielplatz eingefügt wurden
                 for place in global_marking:
                     if global_marking[place] > place_max_capacities[place]:
                         place_max_capacities[place] = global_marking[place]
-                        # Für den Zielplatz zusätzliche Informationen speichern
-                        if place.name == target_place_name:
-                            # Ermittle den Zeitstempel des nächsten Events mit der ausgehenden Transition
-                            next_place_timestamp = None
-                            case_events = events_by_case[case_id]
-                            for i, (evt_ts, evt) in enumerate(case_events):
-                                if evt_ts == ts and evt[activity_key] == event[activity_key]:
-                                    # Suche nach dem nächsten Event mit der ausgehenden Transition
-                                    for j in range(i + 1, len(case_events)):
-                                        if case_events[j][1][activity_key] == outgoing_transition:
-                                            next_place_timestamp = case_events[j][0]
-                                            break
-                                    break
-                            # Speichere Informationen
-                            capacity_composition.append({
-                                "place": place.name,
-                                "timestamp": ts,
-                                "case_id": case_id,
-                                "transition": t.label,
-                                "tokens_added": get_produced_tokens(t)[1].get(place, 0),
-                                "new_max_capacity": global_marking[place],
-                                "next_place_timestamp": next_place_timestamp
-                            })
     
-    return place_max_capacities, capacity_composition
+    return place_max_capacities
 
 def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
                 transition_fitness, notexisting_activities_in_model,
@@ -308,27 +278,11 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
         place_capacities[place]['current'] = tokens
         place_capacities[place]['max'] = tokens
 
-    debug_data = []
-    place_activity_data = []
-
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
         if event[activity_key] in trans_map:
             t = trans_map[event[activity_key]]
             current_event_map.update(event)
-
-            target_transition = "E5GAG45_H5GGML56"
-            if event[activity_key] == target_transition:
-                case_id = event["case:concept:name"]
-                next_activity = "None"
-                if i + 1 < len(sorted_events):
-                    next_activity = sorted_events[i + 1][activity_key]
-                place_activity_data.append({
-                    "case_id": case_id,
-                    "timestamp": event[timestamp_key],
-                    "activity": event[activity_key],
-                    "next_activity": next_activity
-                })
 
             if not semantics.is_enabled(t, net, marking):
                 if stop_immediately_unfit:
@@ -437,7 +391,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
             semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities, debug_data, place_activity_data]
+            place_max_capacities]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
@@ -486,9 +440,7 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
-        self.place_max_capacities = None  # Attribut für place_max_capacities
-        self.debug_data = None
-        self.place_activity_data = None
+        self.place_max_capacities = None
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
         self.events_by_timestamp = events_by_timestamp
@@ -497,7 +449,7 @@ class ApplyTraceTokenReplay:
         self.timestamp_key = timestamp_key
 
     def run(self):
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities, self.debug_data, self.place_activity_data = \
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
@@ -549,9 +501,7 @@ def transcribe_result(t, return_object_names=True):
         "consumed_tokens": int(t.consumed),
         "remaining_tokens": int(t.remaining),
         "produced_tokens": int(t.produced),
-        "place_max_capacities": copy(t.place_max_capacities),  # Muss enthalten sein
-        "debug_data": copy(t.debug_data),
-        "place_activity_data": copy(t.place_activity_data)
+        "place_max_capacities": copy(t.place_max_capacities)
     }
 
     if return_object_names:
@@ -597,18 +547,8 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
 
-    # Änderung: Zwei Rückgabewerte von compute_global_place_capacities
-    global_place_capacities, capacity_composition = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
-    all_debug_data = []
-    all_place_activity_data = []
+    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
 
-    # Speichere capacity_composition als CSV
-    if capacity_composition:
-        capacity_df = pd.DataFrame(capacity_composition)
-        capacity_df.to_csv("../Ergebnisse_PRC/place_capacity_composition.csv", index=False)
-        print(f"Capacity composition data saved to '../Ergebnisse_PRC/place_capacity_composition.csv'")
-
-    # Rest des Codes bleibt unverändert
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
@@ -662,82 +602,11 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                   global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
         t.run()
         threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
-        all_debug_data.extend(threads_results[i]["debug_data"])
-        all_place_activity_data.extend(threads_results[i]["place_activity_data"])
         if progress:
             progress.update()
 
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
-
-    if all_debug_data:
-        debug_df = pd.DataFrame(all_debug_data)
-        debug_df.to_csv("../Ergebnisse_PRC/place_capacity_debug.csv", index=False)
-        print(f"Debugging data saved to '../Ergebnisse_PRC/place_capacity_debug.csv'")
-
-    if all_place_activity_data:
-        place_activity_df = pd.DataFrame(all_place_activity_data)
-        place_activity_df.to_csv("../Ergebnisse_PRC/place_activity_log.csv", index=False)
-        print(f"Place activity log saved to '../Ergebnisse_PRC/place_activity_log.csv'")
-
-    if all_debug_data:
-        contributing_cases = set()
-        for debug_entry in all_debug_data:
-            for case_id in debug_entry["contributing_cases"]:
-                contributing_cases.add(case_id)
-        last_activity_data = []
-        event_sequence_data = []
-        if pandas_utils.check_is_pandas_dataframe(log):
-            for case_id, group in log.groupby(case_id_key):
-                if case_id in contributing_cases:
-                    last_event = group.sort_values(timestamp_key).iloc[-1]
-                    last_activity_data.append({
-                        "case_id": case_id,
-                        "last_activity": last_event[activity_key],
-                        "last_timestamp": last_event[timestamp_key]
-                    })
-                    sorted_group = group.sort_values(timestamp_key)
-                    for idx, row in sorted_group.iterrows():
-                        event = row.to_dict()
-                        next_activity = "None"
-                        if idx + 1 < len(sorted_group):
-                            next_row = sorted_group.iloc[sorted_group.index.get_loc(idx) + 1]
-                            next_activity = next_row[activity_key]
-                        event_sequence_data.append({
-                            "case_id": case_id,
-                            "activity": event[activity_key],
-                            "timestamp": event[timestamp_key],
-                            "next_activity": next_activity
-                        })
-        else:
-            for trace in log:
-                case_id = trace.attributes[case_id_key]
-                if case_id in contributing_cases:
-                    last_event = max(trace, key=lambda x: x.get(timestamp_key, 0))
-                    last_activity_data.append({
-                        "case_id": case_id,
-                        "last_activity": last_event[activity_key],
-                        "last_timestamp": last_event[timestamp_key]
-                    })
-                    sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
-                    for j, event in enumerate(sorted_trace):
-                        next_activity = "None"
-                        if j + 1 < len(sorted_trace):
-                            next_activity = sorted_trace[j + 1][activity_key]
-                        event_sequence_data.append({
-                            "case_id": case_id,
-                            "activity": event[activity_key],
-                            "timestamp": event[timestamp_key],
-                            "next_activity": next_activity
-                        })
-        if last_activity_data:
-            last_activity_df = pd.DataFrame(last_activity_data)
-            last_activity_df.to_csv("../Ergebnisse_PRC/contributing_cases_last_activity.csv", index=False)
-            print(f"Last activity data saved to '../Ergebnisse_PRC/contributing_cases_last_activity.csv'")
-        if event_sequence_data:
-            event_sequence_df = pd.DataFrame(event_sequence_data)
-            event_sequence_df.to_csv("../Ergebnisse_PRC/contributing_cases_event_sequence.csv", index=False)
-            print(f"Event sequence data saved to '../Ergebnisse_PRC/contributing_cases_event_sequence.csv'")
 
     if progress:
         progress.close()
@@ -763,6 +632,7 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
         Parameters.TRY_TO_REACH_FINAL_MARKING_THROUGH_HIDDEN, parameters, True)
     stop_immediately_unfit = exec_utils.get_param_value(Parameters.STOP_IMMEDIATELY_UNFIT, parameters, False)
     walk_through_hidden_trans = exec_utils.get_param_value(Parameters.WALK_THROUGH_HIDDEN_TRANS, parameters, True)
+    is tiling
     is_reduction = exec_utils.get_param_value(Parameters.IS_REDUCTION, parameters, False)
     cleaning_token_flood = exec_utils.get_param_value(Parameters.CLEANING_TOKEN_FLOOD, parameters, False)
     disable_variants = exec_utils.get_param_value(Parameters.DISABLE_VARIANTS, parameters, enable_pltr_fitness)
