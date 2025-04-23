@@ -678,24 +678,31 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
-    for event_type_elem in root.find('eventTypes'):
+    # Namespace handling
+    ns = {'ocel': 'http://www.ocel-standard.org/'}
+    event_types_elem = root.find('ocel:eventTypes', namespaces=ns)
+    if event_types_elem is None:
+        print(f"Error: No <eventTypes> element found in {ocel_path}")
+        return
+    
+    for event_type_elem in event_types_elem.findall('ocel:event-type', namespaces=ns):
         event_type_name = event_type_elem.get('name')
         if event_type_name in type_capacities:
             existing_capacity = None
-            for attr in event_type_elem.findall('attribute'):
+            for attr in event_type_elem.findall('ocel:attribute', namespaces=ns):
                 if attr.get('name') == 'capacity':
                     existing_capacity = attr
                     break
             if existing_capacity is not None:
                 existing_capacity.set('value', str(type_capacities[event_type_name]))
             else:
-                capacity_elem = ElementTree.SubElement(event_type_elem, 'attribute')
+                capacity_elem = ElementTree.SubElement(event_type_elem, 'ocel:attribute')
                 capacity_elem.set('name', 'capacity')
                 capacity_elem.set('value', str(type_capacities[event_type_name]))
                 capacity_elem.set('type', 'integer')
     
     tree.write(output_ocel_path)
-    print(f"Updated OCEL XML saved to '{output_ocel_path}'")
+    print(f"Updated OCEL XML saved to '{output_ocel_path}')
 
 def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
