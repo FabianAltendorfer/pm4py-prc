@@ -701,9 +701,9 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
                 capacity_elem.set('type', 'integer')
     
     tree.write(output_ocel_path)
-    print(f"Updated OCEL XML saved to '{output_ocel_path}')
+    print(f"Updated OCEL XML saved to {output_ocel_path}")
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     # ... (vorherige Logik unverändert)
     
     if ocel_path and output_ocel_path:
