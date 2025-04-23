@@ -679,31 +679,39 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
-    # Namespace handling
-    ns = {'ocel': 'http://www.ocel-standard.org/'}
-    event_types_elem = root.find('ocel:eventTypes', namespaces=ns)
+    event_types_elem = root.find('event-types')
     if event_types_elem is None:
-        print(f"Error: No <eventTypes> element found in {ocel_path}")
+        print(f"Error: No <event-types> element found in {ocel_path}")
         return
     
-    for event_type_elem in event_types_elem.findall('ocel:event-type', namespaces=ns):
+    for event_type_elem in event_types_elem.findall('event-type'):
         event_type_name = event_type_elem.get('name')
         if event_type_name in type_capacities:
             existing_capacity = None
-            for attr in event_type_elem.findall('ocel:attribute', namespaces=ns):
+            for attr in event_type_elem.findall('attribute'):
                 if attr.get('name') == 'capacity':
                     existing_capacity = attr
                     break
             if existing_capacity is not None:
                 existing_capacity.set('value', str(type_capacities[event_type_name]))
             else:
-                capacity_elem = ElementTree.SubElement(event_type_elem, 'ocel:attribute')
+                capacity_elem = ElementTree.SubElement(event_type_elem, 'attribute')
                 capacity_elem.set('name', 'capacity')
                 capacity_elem.set('value', str(type_capacities[event_type_name]))
                 capacity_elem.set('type', 'integer')
     
     tree.write(output_ocel_path)
-    print(f"Updated OCEL XML saved to {output_ocel_path}")
+    print(f"Updated OCEL XML saved to '{output_ocel_path}')
+
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+    # ... (vorherige Logik unverändert)
+    
+    if ocel_path and output_ocel_path:
+        with open(os.path.join(os.path.dirname(output_ocel_path), f"max_capacities_{case_id_key}.txt"), "a") as f:
+            f.write(f"Maximalkapazitäten für Event Types: {type_capacities}\n")
+        update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
+    
+    return pd.DataFrame(diagn_stream)
 
 def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
@@ -782,6 +790,9 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 type_capacities[event_type] = max(type_capacities[event_type], max_capacity)
     
     if ocel_path and output_ocel_path:
+        print(f"Maximalkapazitäten für Event Types: {type_capacities}")
         update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
+    
+    return pd.DataFrame(diagn_stream)
     
     return pd.DataFrame(diagn_stream)
