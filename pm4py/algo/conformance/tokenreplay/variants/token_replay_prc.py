@@ -800,7 +800,7 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: Li
     
     if ocel_path and output_ocel_path:
         print(f"Maximalkapazitäten für Event Types: {type_capacities}")
-        with open(os.path.join(os.path.dirname(output_ocel_path), f"max_capacities_{case_id_key}.txt"), "a") as f:
+        with open(os.path.join(os.path.dirname(output_ocel_path), "max_capacities.txt"), "a") as f:
             f.write(f"Maximalkapazitäten für Event Types: {type_capacities}\n")
         update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
     
