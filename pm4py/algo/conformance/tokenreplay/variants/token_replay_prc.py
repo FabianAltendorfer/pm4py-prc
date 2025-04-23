@@ -16,7 +16,6 @@ from pm4py.util import typing
 from collections import Counter
 from pm4py.objects.conversion.log import converter as log_converter
 import os
-import pm4py
 
 class Parameters(Enum):
     CASE_ID_KEY = constants.PARAMETER_CONSTANT_CASEID_KEY
@@ -698,7 +697,7 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to '{output_ocel_path}'")
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: typing.List[typing.Alignment], parameters: Optional[Dict[Union[str, pm4py_parameters.Parameters], Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
     
