@@ -520,7 +520,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               activity_key="concept:name", reach_mark_through_hidden=True, stop_immediately_unfit=False,
               walk_through_hidden_trans=True, places_shortest_path_by_hidden=None,
               is_reduction=False, thread_maximum_ex_time=10,
-              cleaning_token_flood=False, disable_variants=False, return_object_names=False, show_progress_bar=True,
+              cleaning_token_flood=False, disable_variants=False, return_object_names=True, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
               timestamp_key="time:timestamp"):
     import pandas as pd
@@ -730,6 +730,7 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
     case_id_key = parameters.get("case:concept:name", "case:concept:name")
     ocel_path = parameters.get('ocel_path')
     output_ocel_path = parameters.get('output_ocel_path')
+    print(f"Output OCEL path: {os.path.abspath(output_ocel_path) if output_ocel_path else 'None'}")
     
     diagn_stream = []
     type_capacities = {}
@@ -744,7 +745,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -755,12 +755,11 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                max_capacity = max(place_max_capacities.values(), default=0)
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], max_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     else:
         for index in range(len(log)):
             case_id = log[index].attributes[case_id_key]
@@ -771,7 +770,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -782,17 +780,16 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                max_capacity = max(place_max_capacities.values(), default=0)
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], max_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     
     if ocel_path and output_ocel_path:
         print(f"Maximalkapazitäten für Event Types: {type_capacities}")
+        with open(os.path.join(os.path.dirname(output_ocel_path), f"max_capacities_{case_id_key}.txt"), "a") as f:
+            f.write(f"Maximalkapazitäten für Event Types: {type_capacities}\n")
         update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
-    
-    return pd.DataFrame(diagn_stream)
     
     return pd.DataFrame(diagn_stream)
