@@ -673,38 +673,32 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     
     Args:
         ocel_path (str): Path to the input OCEL XML file.
-        type_capacities (dict): Dictionary with event types and their capacities, e.g., {'E5GA390_H5GYV0M6': 1232}.
+        type_capacities (dict): Dictionary with event types and their capacities.
         output_ocel_path (str): Path to save the updated OCEL XML file.
     """
-    # Parse the OCEL XML
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
-    # Update eventTypes with capacity attributes
     for event_type_elem in root.find('eventTypes'):
         event_type_name = event_type_elem.get('name')
         if event_type_name in type_capacities:
-            # Check if capacity attribute already exists
             existing_capacity = None
             for attr in event_type_elem.findall('attribute'):
                 if attr.get('name') == 'capacity':
                     existing_capacity = attr
                     break
             if existing_capacity is not None:
-                # Update existing capacity
                 existing_capacity.set('value', str(type_capacities[event_type_name]))
             else:
-                # Add new capacity attribute
                 capacity_elem = ElementTree.SubElement(event_type_elem, 'attribute')
                 capacity_elem.set('name', 'capacity')
                 capacity_elem.set('value', str(type_capacities[event_type_name]))
                 capacity_elem.set('type', 'integer')
     
-    # Save the updated XML
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to '{output_ocel_path}'")
 
-def get_diagnostics_dataframe(log: Union[pm4py.objects.log.log.EventLog, pd.DataFrame], tbr_output: list, parameters: Optional[Dict[Union[str, util.parameters.Parameters], Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: typing.List[typing.Alignment], parameters: Optional[Dict[Union[str, pm4py_parameters.Parameters], Any]] = None) -> pd.DataFrame:
     """
     Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
     
@@ -718,12 +712,11 @@ def get_diagnostics_dataframe(log: Union[pm4py.objects.log.log.EventLog, pd.Data
     """
     if parameters is None:
         parameters = {}
-    case_id_key = exec_utils.get_param_value(pm4py.util.parameters.Parameters.CASE_ID_KEY, parameters, xes_util.DEFAULT_TRACEID_KEY)
+    case_id_key = exec_utils.get_param_value(pm4py_parameters.Parameters.CASE_ID_KEY, parameters, xes_util.DEFAULT_TRACEID_KEY)
     ocel_path = exec_utils.get_param_value('ocel_path', parameters, None)
     output_ocel_path = exec_utils.get_param_value('output_ocel_path', parameters, None)
     
     diagn_stream = []
-    # Aggregate capacities per event type
     type_capacities = {}
     
     if isinstance(log, pd.DataFrame):
@@ -746,9 +739,8 @@ def get_diagnostics_dataframe(log: Union[pm4py.objects.log.log.EventLog, pd.Data
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            # Aggregate capacities for incoming event types
             for (incoming, _), capacity in place_max_capacities.items():
-                for event_type in incoming:  # Each event ID is its own event type
+                for event_type in incoming:
                     if event_type not in type_capacities:
                         type_capacities[event_type] = 0
                     type_capacities[event_type] = max(type_capacities[event_type], capacity)
@@ -772,14 +764,12 @@ def get_diagnostics_dataframe(log: Union[pm4py.objects.log.log.EventLog, pd.Data
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            # Aggregate capacities for incoming event types
             for (incoming, _), capacity in place_max_capacities.items():
-                for event_type in incoming:  # Each event ID is its own event type
+                for event_type in incoming:
                     if event_type not in type_capacities:
                         type_capacities[event_type] = 0
                     type_capacities[event_type] = max(type_capacities[event_type], capacity)
     
-    # Update OCEL XML with aggregated capacities
     if ocel_path and output_ocel_path:
         update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
     
