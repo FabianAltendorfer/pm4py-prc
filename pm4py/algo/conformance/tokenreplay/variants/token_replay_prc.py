@@ -587,27 +587,27 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         traces = [(trace.attributes[case_id_key], [event[activity_key] for event in trace], trace) for trace in log]
 
     for i, (case_id, activities, trace_data) in enumerate(traces):
-    try:
-        t = ApplyTraceTokenReplay(trace_data, net, initial_marking, final_marking,
-                                  trans_map, enable_pltr_fitness, place_fitness_per_trace,
-                                  transition_fitness_per_trace, notexisting_activities_in_model,
-                                  places_shortest_path_by_hidden, consider_remaining_in_fitness,
-                                  activity_key=activity_key, reach_mark_through_hidden=reach_mark_through_hidden,
-                                  stop_immediately_unfit=stop_immediately_unfit,
-                                  walk_through_hidden_trans=walk_through_hidden_trans,
-                                  post_fix_caching=post_fix_cache, marking_to_activity_caching=marking_to_activity_cache,
-                                  is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
-                                  cleaning_token_flood=cleaning_token_flood, s_components=s_components,
-                                  trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
-                                  events_by_timestamp=events_by_timestamp, global_place_counts={},
-                                  global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
-        t.run()
-        threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
-        if progress:
-            progress.update()
-    except Exception as e:
-        print(f"Error processing trace {i} (case_id: {case_id}, activities: {activities}): {str(e)}")
-        continue
+        try:
+            t = ApplyTraceTokenReplay(trace_data, net, initial_marking, final_marking,
+                                    trans_map, enable_pltr_fitness, place_fitness_per_trace,
+                                    transition_fitness_per_trace, notexisting_activities_in_model,
+                                    places_shortest_path_by_hidden, consider_remaining_in_fitness,
+                                    activity_key=activity_key, reach_mark_through_hidden=reach_mark_through_hidden,
+                                    stop_immediately_unfit=stop_immediately_unfit,
+                                    walk_through_hidden_trans=walk_through_hidden_trans,
+                                    post_fix_caching=post_fix_cache, marking_to_activity_caching=marking_to_activity_cache,
+                                    is_reduction=is_reduction, thread_maximum_ex_time=thread_maximum_ex_time,
+                                    cleaning_token_flood=cleaning_token_flood, s_components=s_components,
+                                    trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
+                                    events_by_timestamp=events_by_timestamp, global_place_counts={},
+                                    global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
+            t.run()
+            threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
+            if progress:
+                progress.update()
+        except Exception as e:
+            print(f"Error processing trace {i} (case_id: {case_id}, activities: {activities}): {str(e)}")
+            continue
 
     for i in range(len(traces)):
         aligned_traces.append(threads_results[i])
