@@ -655,7 +655,8 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
 
 def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int], output_ocel_path: str) -> None:
     """
-    Updates the OCEL file with capacity attributes for event types, avoiding inconsistencies by preserving the maximum capacity value.
+    Updates the OCEL file with capacity attributes for event types, ensuring they are placed within the <attributes> element
+    and preserving the maximum capacity value to avoid inconsistencies.
 
     Parameters:
     -----------
@@ -669,34 +670,62 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
-    event_types_elem = root.find('event-types')
+    # Namespace ermitteln (falls vorhanden)
+    ns = {}
+    if '}' in root.tag:
+        ns_uri = root.tag.split('}')[0][1:]
+        ns = {'ocel': ns_uri}
+    
+    # Finde <event-types> mit Namespace
+    event_types_elem = root.find('ocel:event-types' if ns else 'event-types', namespaces=ns)
     if event_types_elem is None:
         print(f"Error: No <event-types> element found in {ocel_path}")
         return
     
-    for event_type_elem in event_types_elem.findall('event-type'):
+    for event_type_elem in event_types_elem.findall('ocel:event-type' if ns else 'event-type', namespaces=ns):
         event_type_name = event_type_elem.get('name')
         if event_type_name in type_capacities:
             new_capacity = type_capacities[event_type_name]
+            
+            # Finde oder erstelle <attributes>-Element
+            attributes_elem = event_type_elem.find('ocel:attributes' if ns else 'attributes', namespaces=ns)
+            if attributes_elem is None:
+                attributes_elem = ElementTree.SubElement(event_type_elem, 'attributes')
+            
+            # Prüfe auf bestehende Kapazität (innerhalb oder außerhalb von <attributes>)
             existing_capacity_elem = None
-            for attr in event_type_elem.findall('attribute'):
+            for attr in event_type_elem.findall('ocel:attribute' if ns else 'attribute', namespaces=ns):
                 if attr.get('name') == 'capacity':
                     existing_capacity_elem = attr
                     break
+            if existing_capacity_elem is None:
+                for attr in attributes_elem.findall('ocel:attribute' if ns else 'attribute', namespaces=ns):
+                    if attr.get('name') == 'capacity':
+                        existing_capacity_elem = attr
+                        break
+            
             if existing_capacity_elem is not None:
                 try:
                     existing_capacity = int(existing_capacity_elem.get('value'))
-                    # Update only if the new capacity is higher to avoid inconsistencies
+                    # Update nur, wenn die neue Kapazität höher ist
                     if new_capacity > existing_capacity:
                         existing_capacity_elem.set('value', str(new_capacity))
                         print(f"Updated capacity for event type {event_type_name}: {existing_capacity} -> {new_capacity}")
                     else:
                         print(f"Kept existing capacity for event type {event_type_name}: {existing_capacity} (new: {new_capacity})")
+                    # Verschiebe das Attribut in <attributes>, falls es außerhalb ist
+                    if existing_capacity_elem in event_type_elem:
+                        event_type_elem.remove(existing_capacity_elem)
+                        attributes_elem.append(existing_capacity_elem)
                 except ValueError:
                     print(f"Warning: Invalid existing capacity value for event type {event_type_name}, replacing with {new_capacity}")
                     existing_capacity_elem.set('value', str(new_capacity))
+                    if existing_capacity_elem in event_type_elem:
+                        event_type_elem.remove(existing_capacity_elem)
+                        attributes_elem.append(existing_capacity_elem)
             else:
-                capacity_elem = ElementTree.SubElement(event_type_elem, 'attribute')
+                # Füge neues Kapazitätsattribut in <attributes> hinzu
+                capacity_elem = ElementTree.SubElement(attributes_elem, 'attribute')
                 capacity_elem.set('name', 'capacity')
                 capacity_elem.set('value', str(new_capacity))
                 capacity_elem.set('type', 'integer')
