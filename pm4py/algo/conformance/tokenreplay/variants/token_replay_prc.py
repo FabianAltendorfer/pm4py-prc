@@ -655,8 +655,9 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
 
 def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int], output_ocel_path: str) -> None:
     """
-    Updates the OCEL file with capacity attributes for event types, ensuring they are placed within the <attributes> element
-    and preserving the maximum capacity value to avoid inconsistencies.
+    Updates the OCEL file with capacity attributes for event types, placing them within the <attributes> element
+    in the format <attribute name="capacity" type="integer">[value]</attribute>, preserving the maximum capacity value
+    to avoid inconsistencies.
 
     Parameters:
     -----------
@@ -710,18 +711,24 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
             
             if existing_capacity_elem is not None:
                 try:
-                    existing_capacity = int(existing_capacity_elem.get('value'))
+                    # Versuche, Wert aus Text oder value-Attribut zu lesen
+                    existing_capacity = int(existing_capacity_elem.text) if existing_capacity_elem.text else int(existing_capacity_elem.get('value'))
                     # Update nur, wenn die neue Kapazität höher ist
                     if new_capacity > existing_capacity:
-                        existing_capacity_elem.set('value', str(new_capacity))
+                        existing_capacity_elem.text = str(new_capacity)
                         print(f"Updated capacity for event type {event_type_name}: {existing_capacity} -> {new_capacity}")
                     else:
                         print(f"Kept existing capacity for event type {event_type_name}: {existing_capacity} (new: {new_capacity})")
+                    # Entferne value-Attribut, falls vorhanden
+                    if 'value' in existing_capacity_elem.attrib:
+                        del existing_capacity_elem.attrib['value']
+                    # Setze type="integer", falls nicht vorhanden
+                    existing_capacity_elem.set('type', 'integer')
                     # Verschiebe das Attribut in <attributes>, falls es außerhalb ist
                     if existing_capacity_elem.getparent() == event_type_elem:
                         event_type_elem.remove(existing_capacity_elem)
                         attributes_elem.append(existing_capacity_elem)
-                except ValueError:
+                except (ValueError, TypeError):
                     print(f"Warning: Invalid existing capacity value for event type {event_type_name}, replacing with {new_capacity}")
                     if existing_capacity_elem.getparent() == event_type_elem:
                         event_type_elem.remove(existing_capacity_elem)
@@ -729,14 +736,14 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
                         attributes_elem.remove(existing_capacity_elem)
                     capacity_elem = ElementTree.SubElement(attributes_elem, 'attribute')
                     capacity_elem.set('name', 'capacity')
-                    capacity_elem.set('value', str(new_capacity))
                     capacity_elem.set('type', 'integer')
+                    capacity_elem.text = str(new_capacity)
             else:
                 # Füge neues Kapazitätsattribut in <attributes> hinzu
                 capacity_elem = ElementTree.SubElement(attributes_elem, 'attribute')
                 capacity_elem.set('name', 'capacity')
-                capacity_elem.set('value', str(new_capacity))
                 capacity_elem.set('type', 'integer')
+                capacity_elem.text = str(new_capacity)
                 print(f"Added capacity for event type {event_type_name}: {new_capacity}")
     
     tree.write(output_ocel_path)
