@@ -691,6 +691,10 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
             attributes_elem = event_type_elem.find('ocel:attributes' if ns else 'attributes', namespaces=ns)
             if attributes_elem is None:
                 attributes_elem = ElementTree.SubElement(event_type_elem, 'attributes')
+            elif attributes_elem.text is None and len(attributes_elem) == 0:
+                # Entferne leeres <attributes />-Element und ersetze es
+                event_type_elem.remove(attributes_elem)
+                attributes_elem = ElementTree.SubElement(event_type_elem, 'attributes')
             
             # Prüfe auf bestehende Kapazität (innerhalb oder außerhalb von <attributes>)
             existing_capacity_elem = None
@@ -714,15 +718,19 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
                     else:
                         print(f"Kept existing capacity for event type {event_type_name}: {existing_capacity} (new: {new_capacity})")
                     # Verschiebe das Attribut in <attributes>, falls es außerhalb ist
-                    if existing_capacity_elem in event_type_elem:
+                    if existing_capacity_elem.getparent() == event_type_elem:
                         event_type_elem.remove(existing_capacity_elem)
                         attributes_elem.append(existing_capacity_elem)
                 except ValueError:
                     print(f"Warning: Invalid existing capacity value for event type {event_type_name}, replacing with {new_capacity}")
-                    existing_capacity_elem.set('value', str(new_capacity))
-                    if existing_capacity_elem in event_type_elem:
+                    if existing_capacity_elem.getparent() == event_type_elem:
                         event_type_elem.remove(existing_capacity_elem)
-                        attributes_elem.append(existing_capacity_elem)
+                    elif existing_capacity_elem.getparent() == attributes_elem:
+                        attributes_elem.remove(existing_capacity_elem)
+                    capacity_elem = ElementTree.SubElement(attributes_elem, 'attribute')
+                    capacity_elem.set('name', 'capacity')
+                    capacity_elem.set('value', str(new_capacity))
+                    capacity_elem.set('type', 'integer')
             else:
                 # Füge neues Kapazitätsattribut in <attributes> hinzu
                 capacity_elem = ElementTree.SubElement(attributes_elem, 'attribute')
