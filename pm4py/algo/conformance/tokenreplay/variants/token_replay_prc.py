@@ -713,7 +713,7 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
     
     return pd.DataFrame(diagn_stream)
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
     
