@@ -685,12 +685,8 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
     if parameters is None:
         parameters = {}
     case_id_key = parameters.get("case:concept:name", "case:concept:name")
-    ocel_path = parameters.get('ocel_path')
-    output_ocel_path = parameters.get('output_ocel_path')
-    print(f"Output OCEL path: {os.path.abspath(output_ocel_path) if output_ocel_path else 'None'}")
     
     diagn_stream = []
-    type_capacities = event_type_capacities
     
     if isinstance(log, pd.DataFrame):
         for index, row in log.groupby(case_id_key).first().reset_index().iterrows():
@@ -728,11 +724,5 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "produced": produced,
                 "consumed": consumed
             })
-    
-    if ocel_path and output_ocel_path:
-        print(f"Maximalkapazitäten für Event Types: {type_capacities}")
-        with open(os.path.join(os.path.dirname(output_ocel_path), "max_capacities.txt"), "a") as f:
-            f.write(f"Maximalkapazitäten für Event Types: {type_capacities}\n")
-        update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
     
     return pd.DataFrame(diagn_stream)
