@@ -523,7 +523,20 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               cleaning_token_flood=False, disable_variants=False, return_object_names=True, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
               timestamp_key="time:timestamp"):
-    import pandas as pd
+    
+    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
+    
+    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
+    place_capacities_structured = {}
+    for place, capacity in global_place_capacities.items():
+        incoming = frozenset(t.label for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs))
+        outgoing = frozenset(t.label for t in net.transitions if any(arc.source == t and arc.target == place for arc in t.out_arcs))
+        if incoming and outgoing:
+            place_capacities_structured[(incoming, outgoing)] = capacity
+    
+    print(f"place_capacities_structured: {place_capacities_structured}")
+    
+    
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
