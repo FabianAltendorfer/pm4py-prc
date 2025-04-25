@@ -442,7 +442,7 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
-        self.place_max_capacities = None
+        self.place_max_capacities = global_place_capacities  # Verwende die strukturierte Form direkt
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
         self.events_by_timestamp = events_by_timestamp
@@ -523,21 +523,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               cleaning_token_flood=False, disable_variants=False, return_object_names=True, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
               timestamp_key="time:timestamp"):
-    
-    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name) if t.label}
-    
-    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
-    
-    place_capacities_structured = {}
-    for place, capacity in global_place_capacities.items():
-        incoming = frozenset(t.label for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs))
-        outgoing = frozenset(t.label for t in net.transitions if any(arc.source == t and arc.target == place for arc in t.out_arcs))
-        if incoming and outgoing:
-            place_capacities_structured[(incoming, outgoing)] = capacity
-    
-    print(f"place_capacities_structured: {place_capacities_structured}")
-    
-    
+    import pandas as pd
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
@@ -561,9 +547,19 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     notexisting_activities_in_model = {}
 
-    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
+    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name) if t.label}
 
     global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
+
+    # Konvertiere global_place_capacities in die gewünschte Struktur
+    place_capacities_structured = {}
+    for place, capacity in global_place_capacities.items():
+        incoming = frozenset(t.label for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs))
+        outgoing = frozenset(t.label for t in net.transitions if any(arc.source == t and arc.target == place for arc in t.out_arcs))
+        if incoming and outgoing:
+            place_capacities_structured[(incoming, outgoing)] = capacity
+    
+    print(f"place_capacities_structured: {place_capacities_structured}")
 
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
@@ -616,7 +612,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                     cleaning_token_flood=cleaning_token_flood, s_components=s_components,
                                     trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
                                     events_by_timestamp=events_by_timestamp, global_place_counts={},
-                                    global_place_capacities=global_place_capacities, timestamp_key=timestamp_key)
+                                    global_place_capacities=place_capacities_structured, timestamp_key=timestamp_key)
             t.run()
             threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
             if progress:
@@ -632,16 +628,13 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
         progress.close()
 
     for i in range(len(aligned_traces)):
-        if return_object_names:
-            aligned_traces[i]["place_max_capacities"] = {place.name: global_place_capacities[place] for place in net.places}
-        else:
-            aligned_traces[i]["place_max_capacities"] = global_place_capacities
+        aligned_traces[i]["place_max_capacities"] = place_capacities_structured  # Verwende die strukturierte Form direkt
 
     if enable_pltr_fitness:
         return aligned_traces, place_fitness_per_trace, transition_fitness_per_trace, notexisting_activities_in_model
     else:
         return aligned_traces
-
+    
 def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[Union[str, Parameters], Any]] = None) -> typing.ListAlignments:
     if parameters is None:
         parameters = {}
@@ -717,17 +710,7 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to {output_ocel_path}")
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
-    # ... (vorherige Logik unverändert)
-    
-    if ocel_path and output_ocel_path:
-        with open(os.path.join(os.path.dirname(output_ocel_path), f"max_capacities_{case_id_key}.txt"), "a") as f:
-            f.write(f"Maximalkapazitäten für Event Types: {type_capacities}\n")
-        update_ocel_with_capacities(ocel_path, type_capacities, output_ocel_path)
-    
-    return pd.DataFrame(diagn_stream)
-
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
     
@@ -759,7 +742,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -770,16 +752,11 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                # Berechne die maximale Kapazität für die Eingangsstellen der Transition
-                trans_capacity = 0
-                for arc in trans.in_arcs:
-                    place = arc.source
-                    trans_capacity = max(trans_capacity, place_max_capacities.get(place, 0))
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], trans_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     else:
         for index in range(len(log)):
             case_id = log[index].attributes[case_id_key]
@@ -790,7 +767,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -801,16 +777,11 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                # Berechne die maximale Kapazität für die Eingangsstellen der Transition
-                trans_capacity = 0
-                for arc in trans.in_arcs:
-                    place = arc.source
-                    trans_capacity = max(trans_capacity, place_max_capacities.get(place, 0))
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], trans_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     
     if ocel_path and output_ocel_path:
         print(f"Maximalkapazitäten für Event Types: {type_capacities}")
