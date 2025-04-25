@@ -218,11 +218,9 @@ def get_overlapping_events(event, events_by_timestamp, activity_key, timestamp_k
 
 def compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key="time:timestamp", activity_key="concept:name"):
     all_events = []
-    events_by_case = {}
     if pandas_utils.check_is_pandas_dataframe(log):
         for case_id, group in log.groupby(case_id_key):
             sorted_group = group.sort_values(timestamp_key)
-            events_by_case[case_id] = [(row[timestamp_key], row.to_dict()) for idx, row in sorted_group.iterrows()]
             for idx, row in sorted_group.iterrows():
                 event = row.to_dict()
                 all_events.append((event[timestamp_key], case_id, event))
@@ -230,7 +228,6 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
         for trace in log:
             case_id = trace.attributes[case_id_key]
             sorted_trace = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
-            events_by_case[case_id] = [(event[timestamp_key], event) for event in sorted_trace]
             for event in sorted_trace:
                 all_events.append((event[timestamp_key], case_id, event))
     
@@ -248,7 +245,19 @@ def compute_global_place_capacities(log, net, initial_marking, trans_map, case_i
                     if global_marking[place] > place_max_capacities[place]:
                         place_max_capacities[place] = global_marking[place]
     
-    return place_max_capacities
+    # Assign capacities to incoming event types
+    event_type_capacities = {}
+    for place, capacity in place_max_capacities.items():
+        incoming_transitions = [t for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs)]
+        for trans in incoming_transitions:
+            if trans.label:
+                event_type = trans.label
+                if event_type not in event_type_capacities:
+                    event_type_capacities[event_type] = capacity
+                else:
+                    event_type_capacities[event_type] = max(event_type_capacities[event_type], capacity)
+    
+    return event_type_capacities
 
 def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
                 transition_fitness, notexisting_activities_in_model,
@@ -259,7 +268,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
                 thread_maximum_ex_time=10, enable_postfix_cache=False, enable_marktoact_cache=False,
                 cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                 consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
-                global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
+                global_place_counts=None, timestamp_key="time:timestamp"):
     sorted_events = sorted(trace, key=lambda x: x.get(timestamp_key, 0))
 
     act_trans = []
@@ -274,11 +283,6 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
     produced = sum(initial_marking[p] for p in initial_marking)
     current_event_map = {}
     current_remaining_map = {}
-
-    place_capacities = {place: {'current': 0, 'max': 0} for place in net.places}
-    for place, tokens in initial_marking.items():
-        place_capacities[place]['current'] = tokens
-        place_capacities[place]['max'] = tokens
 
     for i, event in enumerate(sorted_events):
         prev_len_activated_transitions = len(act_trans)
@@ -312,13 +316,7 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
             produced += p
 
             if semantics.is_enabled(t, net, marking):
-                for place in cmap:
-                    place_capacities[place]['current'] -= cmap[place]
                 marking = semantics.execute(t, net, marking)
-                for place in pmap:
-                    place_capacities[place]['current'] += pmap[place]
-                    if place_capacities[place]['current'] > place_capacities[place]['max']:
-                        place_capacities[place]['max'] = place_capacities[place]['current']
                 act_trans.append(t)
                 vis_mark.append(marking)
 
@@ -390,10 +388,8 @@ def apply_trace(trace, net, initial_marking, final_marking, trans_map, enable_pl
 
     trace_fitness = 0.5 * (1.0 - float(missing) / float(consumed)) + 0.5 * (1.0 - float(remaining) / float(produced)) if consumed > 0 and produced > 0 else 1.0
 
-    place_max_capacities = {place: capacities['max'] for place, capacities in place_capacities.items()}
     return [is_fit, trace_fitness, act_trans, transitions_with_problems, marking_before_cleaning,
-            semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced,
-            place_max_capacities]
+            semantics.enabled_transitions(net, marking_before_cleaning), missing, consumed, remaining, produced]
 
 class ApplyTraceTokenReplay:
     def __init__(self, trace, net, initial_marking, final_marking, trans_map, enable_pltr_fitness, place_fitness,
@@ -404,7 +400,7 @@ class ApplyTraceTokenReplay:
                  thread_maximum_ex_time=TechnicalParameters.MAX_DEF_THR_EX_TIME.value,
                  cleaning_token_flood=False, s_components=None, trace_occurrences=1,
                  consider_activities_not_in_model_in_fitness=False, events_by_timestamp=None,
-                 global_place_counts=None, global_place_capacities=None, timestamp_key="time:timestamp"):
+                 global_place_counts=None, timestamp_key="time:timestamp"):
         self.thread_is_alive = True
         self.trace = trace
         self.net = net
@@ -442,16 +438,14 @@ class ApplyTraceTokenReplay:
         self.consumed = None
         self.remaining = None
         self.produced = None
-        self.place_max_capacities = global_place_capacities  # Verwende die strukturierte Form direkt
         self.s_components = s_components
         self.trace_occurrences = trace_occurrences
         self.events_by_timestamp = events_by_timestamp
         self.global_place_counts = global_place_counts
-        self.global_place_capacities = global_place_capacities
         self.timestamp_key = timestamp_key
 
     def run(self):
-        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced, self.place_max_capacities = \
+        self.t_fit, self.t_value, self.act_trans, self.trans_probl, self.reached_marking, self.enabled_trans_in_mark, self.missing, self.consumed, self.remaining, self.produced = \
             apply_trace(self.trace, self.net, self.initial_marking, self.final_marking, self.trans_map,
                         self.enable_pltr_fitness, self.place_fitness, self.transition_fitness,
                         self.notexisting_activities_in_model,
@@ -472,7 +466,6 @@ class ApplyTraceTokenReplay:
                         consider_activities_not_in_model_in_fitness=self.consider_activities_not_in_model_in_fitness,
                         events_by_timestamp=self.events_by_timestamp,
                         global_place_counts=self.global_place_counts,
-                        global_place_capacities=self.global_place_capacities,
                         timestamp_key=self.timestamp_key)
         self.thread_is_alive = False
 
@@ -502,8 +495,7 @@ def transcribe_result(t, return_object_names=True):
         "missing_tokens": int(t.missing),
         "consumed_tokens": int(t.consumed),
         "remaining_tokens": int(t.remaining),
-        "produced_tokens": int(t.produced),
-        "place_max_capacities": copy(t.place_max_capacities)
+        "produced_tokens": int(t.produced)
     }
 
     if return_object_names:
@@ -523,7 +515,6 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               cleaning_token_flood=False, disable_variants=False, return_object_names=True, show_progress_bar=True,
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
               timestamp_key="time:timestamp"):
-    import pandas as pd
     post_fix_cache = PostFixCaching()
     marking_to_activity_cache = MarkingToActivityCaching()
     if places_shortest_path_by_hidden is None:
@@ -549,17 +540,8 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
 
     trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name) if t.label}
 
-    global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
-
-    # Konvertiere global_place_capacities in die gewünschte Struktur
-    place_capacities_structured = {}
-    for place, capacity in global_place_capacities.items():
-        incoming = frozenset(t.label for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs))
-        outgoing = frozenset(t.label for t in net.transitions if any(arc.source == t and arc.target == place for arc in t.out_arcs))
-        if incoming and outgoing:
-            place_capacities_structured[(incoming, outgoing)] = capacity
-    
-    print(f"place_capacities_structured: {place_capacities_structured}")
+    # Compute capacities based on incoming transitions only
+    event_type_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
 
     events_by_timestamp = {}
     if pandas_utils.check_is_pandas_dataframe(log):
@@ -612,7 +594,7 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
                                     cleaning_token_flood=cleaning_token_flood, s_components=s_components,
                                     trace_occurrences=1, consider_activities_not_in_model_in_fitness=consider_activities_not_in_model_in_fitness,
                                     events_by_timestamp=events_by_timestamp, global_place_counts={},
-                                    global_place_capacities=place_capacities_structured, timestamp_key=timestamp_key)
+                                    timestamp_key=timestamp_key)
             t.run()
             threads_results[i] = transcribe_result(t, return_object_names=return_object_names)
             if progress:
@@ -627,13 +609,10 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
     if progress:
         progress.close()
 
-    for i in range(len(aligned_traces)):
-        aligned_traces[i]["place_max_capacities"] = place_capacities_structured  # Verwende die strukturierte Form direkt
-
     if enable_pltr_fitness:
-        return aligned_traces, place_fitness_per_trace, transition_fitness_per_trace, notexisting_activities_in_model
+        return aligned_traces, place_fitness_per_trace, transition_fitness_per_trace, notexisting_activities_in_model, event_type_capacities
     else:
-        return aligned_traces
+        return aligned_traces, event_type_capacities
     
 def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking: Marking, parameters: Optional[Dict[Union[str, Parameters], Any]] = None) -> typing.ListAlignments:
     if parameters is None:
@@ -675,14 +654,6 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
                      case_id_key=case_id_key)
 
 def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int], output_ocel_path: str) -> None:
-    """
-    Updates the OCEL 2.0 XML file with capacity attributes for event types.
-    
-    Args:
-        ocel_path (str): Path to the input OCEL XML file.
-        type_capacities (dict): Dictionary with event types and their capacities.
-        output_ocel_path (str): Path to save the updated OCEL XML file.
-    """
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
@@ -710,18 +681,7 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to {output_ocel_path}")
 
-def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: list[Dict[str, Any]], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
-    """
-    Creates a diagnostics DataFrame from TBR output and updates the OCEL XML with capacities.
-    
-    Args:
-        log: Input log (EventLog or DataFrame).
-        tbr_output: List of TBR alignment results (dictionaries).
-        parameters: Configuration parameters.
-    
-    Returns:
-        pd.DataFrame: Diagnostics DataFrame.
-    """
+def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: List[Dict[str, Any]], event_type_capacities: Dict[str, int], parameters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     if parameters is None:
         parameters = {}
     case_id_key = parameters.get("case:concept:name", "case:concept:name")
@@ -730,7 +690,7 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
     print(f"Output OCEL path: {os.path.abspath(output_ocel_path) if output_ocel_path else 'None'}")
     
     diagn_stream = []
-    type_capacities = {}
+    type_capacities = event_type_capacities
     
     if isinstance(log, pd.DataFrame):
         for index, row in log.groupby(case_id_key).first().reset_index().iterrows():
@@ -741,7 +701,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             remaining = tbr_output[index]["remaining_tokens"]
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
-            place_max_capacities = tbr_output[index]["place_max_capacities"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -749,14 +708,8 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "missing": missing,
                 "remaining": remaining,
                 "produced": produced,
-                "consumed": consumed,
-                "place_max_capacities": place_max_capacities
+                "consumed": consumed
             })
-            for (incoming, _), capacity in place_max_capacities.items():
-                for event_type in incoming:
-                    if event_type not in type_capacities:
-                        type_capacities[event_type] = 0
-                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     else:
         for index in range(len(log)):
             case_id = log[index].attributes[case_id_key]
@@ -766,7 +719,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
             remaining = tbr_output[index]["remaining_tokens"]
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
-            place_max_capacities = tbr_output[index]["place_max_capacities"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -774,14 +726,8 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: li
                 "missing": missing,
                 "remaining": remaining,
                 "produced": produced,
-                "consumed": consumed,
-                "place_max_capacities": place_max_capacities
+                "consumed": consumed
             })
-            for (incoming, _), capacity in place_max_capacities.items():
-                for event_type in incoming:
-                    if event_type not in type_capacities:
-                        type_capacities[event_type] = 0
-                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     
     if ocel_path and output_ocel_path:
         print(f"Maximalkapazitäten für Event Types: {type_capacities}")
