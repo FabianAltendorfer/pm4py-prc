@@ -524,9 +524,10 @@ def apply_log(log, net, initial_marking, final_marking, enable_pltr_fitness=Fals
               consider_activities_not_in_model_in_fitness=False, case_id_key=constants.CASE_CONCEPT_NAME, 
               timestamp_key="time:timestamp"):
     
+    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name) if t.label}
+    
     global_place_capacities = compute_global_place_capacities(log, net, initial_marking, trans_map, case_id_key, timestamp_key, activity_key)
     
-    trans_map = {t.label: t for t in sorted(list(net.transitions), key=lambda x: x.name)}
     place_capacities_structured = {}
     for place, capacity in global_place_capacities.items():
         incoming = frozenset(t.label for t in net.transitions if any(arc.source == place and arc.target == t for arc in t.in_arcs))
