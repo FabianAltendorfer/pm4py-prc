@@ -745,7 +745,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: Li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -756,16 +755,11 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: Li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                # Berechne die maximale Kapazität für die Eingangsstellen der Transition
-                trans_capacity = 0
-                for arc in trans.in_arcs:
-                    place = arc.source
-                    trans_capacity = max(trans_capacity, place_max_capacities.get(place, 0))
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], trans_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     else:
         for index in range(len(log)):
             case_id = log[index].attributes[case_id_key]
@@ -776,7 +770,6 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: Li
             produced = tbr_output[index]["produced_tokens"]
             consumed = tbr_output[index]["consumed_tokens"]
             place_max_capacities = tbr_output[index]["place_max_capacities"]
-            activated_transitions = tbr_output[index]["activated_transitions"]
             diagn_stream.append({
                 "case_id": case_id,
                 "is_fit": is_fit,
@@ -787,16 +780,11 @@ def get_diagnostics_dataframe(log: Union[EventLog, pd.DataFrame], tbr_output: Li
                 "consumed": consumed,
                 "place_max_capacities": place_max_capacities
             })
-            for trans in activated_transitions:
-                event_type = trans.label if trans.label else str(trans.name)
-                # Berechne die maximale Kapazität für die Eingangsstellen der Transition
-                trans_capacity = 0
-                for arc in trans.in_arcs:
-                    place = arc.source
-                    trans_capacity = max(trans_capacity, place_max_capacities.get(place, 0))
-                if event_type not in type_capacities:
-                    type_capacities[event_type] = 0
-                type_capacities[event_type] = max(type_capacities[event_type], trans_capacity)
+            for (incoming, _), capacity in place_max_capacities.items():
+                for event_type in incoming:
+                    if event_type not in type_capacities:
+                        type_capacities[event_type] = 0
+                    type_capacities[event_type] = max(type_capacities[event_type], capacity)
     
     if ocel_path and output_ocel_path:
         print(f"Maximalkapazitäten für Event Types: {type_capacities}")
