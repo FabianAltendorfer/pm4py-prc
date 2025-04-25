@@ -654,6 +654,18 @@ def apply(log: EventLog, net: PetriNet, initial_marking: Marking, final_marking:
                      case_id_key=case_id_key)
 
 def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int], output_ocel_path: str) -> None:
+    """
+    Updates the OCEL file with capacity attributes for event types, avoiding inconsistencies by preserving the maximum capacity value.
+
+    Parameters:
+    -----------
+    ocel_path : str
+        Path to the input OCEL XML file.
+    type_capacities : Dict[str, int]
+        Dictionary mapping event type names to their calculated capacities.
+    output_ocel_path : str
+        Path where the updated OCEL XML file will be saved.
+    """
     tree = ElementTree.parse(ocel_path)
     root = tree.getroot()
     
@@ -665,18 +677,30 @@ def update_ocel_with_capacities(ocel_path: str, type_capacities: Dict[str, int],
     for event_type_elem in event_types_elem.findall('event-type'):
         event_type_name = event_type_elem.get('name')
         if event_type_name in type_capacities:
-            existing_capacity = None
+            new_capacity = type_capacities[event_type_name]
+            existing_capacity_elem = None
             for attr in event_type_elem.findall('attribute'):
                 if attr.get('name') == 'capacity':
-                    existing_capacity = attr
+                    existing_capacity_elem = attr
                     break
-            if existing_capacity is not None:
-                existing_capacity.set('value', str(type_capacities[event_type_name]))
+            if existing_capacity_elem is not None:
+                try:
+                    existing_capacity = int(existing_capacity_elem.get('value'))
+                    # Update only if the new capacity is higher to avoid inconsistencies
+                    if new_capacity > existing_capacity:
+                        existing_capacity_elem.set('value', str(new_capacity))
+                        print(f"Updated capacity for event type {event_type_name}: {existing_capacity} -> {new_capacity}")
+                    else:
+                        print(f"Kept existing capacity for event type {event_type_name}: {existing_capacity} (new: {new_capacity})")
+                except ValueError:
+                    print(f"Warning: Invalid existing capacity value for event type {event_type_name}, replacing with {new_capacity}")
+                    existing_capacity_elem.set('value', str(new_capacity))
             else:
                 capacity_elem = ElementTree.SubElement(event_type_elem, 'attribute')
                 capacity_elem.set('name', 'capacity')
-                capacity_elem.set('value', str(type_capacities[event_type_name]))
+                capacity_elem.set('value', str(new_capacity))
                 capacity_elem.set('type', 'integer')
+                print(f"Added capacity for event type {event_type_name}: {new_capacity}")
     
     tree.write(output_ocel_path)
     print(f"Updated OCEL XML saved to {output_ocel_path}")
